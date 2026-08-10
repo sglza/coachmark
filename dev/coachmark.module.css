@@ -1,0 +1,299 @@
+.Backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgb(0 0 0 / 52%);
+  transition:
+    clip-path 240ms ease-in-out,
+    opacity 180ms ease-out;
+}
+
+.Backdrop[data-starting-style],
+.Backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.Positioner {
+  z-index: 9999;
+  transition:
+    top 240ms ease-in-out,
+    left 240ms ease-in-out,
+    transform 240ms ease-in-out,
+    opacity 180ms ease-out;
+}
+
+.Positioner[data-concealed][data-motion-state="repositioning"] {
+  transition: none;
+}
+
+.Popup {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(20rem, calc(100vw - 2rem));
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: 0 18px 45px rgb(0 0 0 / 22%);
+  font-family: inherit;
+  gap: 0.65rem;
+  opacity: 1;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.Popup[data-starting-style],
+.Popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+.Popup.sizeCompact {
+  --coachmark-step-width: min(17rem, calc(100vw - 2rem));
+  width: var(--coachmark-step-width);
+}
+
+.Popup.sizeMedium {
+  --coachmark-step-width: min(20rem, calc(100vw - 2rem));
+  width: var(--coachmark-step-width);
+}
+
+.Popup.sizeLarge {
+  --coachmark-step-width: min(23rem, calc(100vw - 2rem));
+  width: var(--coachmark-step-width);
+}
+
+.Positioner.withViewport.transitionMove {
+  width: var(--positioner-width, max-content);
+  height: var(--positioner-height, max-content);
+  transition:
+    top 240ms ease-in-out,
+    left 240ms ease-in-out,
+    transform 240ms ease-in-out,
+    opacity 180ms ease-out;
+}
+
+.Popup.withViewport.transitionMove {
+  width: var(--popup-width, var(--coachmark-step-width));
+  height: var(--popup-height, auto);
+  transition:
+    width 240ms ease-in-out,
+    height 240ms ease-in-out,
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.Viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: clip;
+}
+
+.Viewport > [data-current],
+.Viewport > [data-previous] {
+  width: 100%;
+  transition:
+    opacity 240ms ease-in-out,
+    transform 240ms ease-in-out;
+}
+
+.Viewport > [data-previous] {
+  inset: 0;
+}
+
+.Viewport {
+  --coachmark-current-x: 0;
+  --coachmark-current-y: 0;
+  --coachmark-previous-x: 0;
+  --coachmark-previous-y: 0;
+}
+
+.Viewport[data-activation-direction~="right"] {
+  --coachmark-current-x: 0.5rem;
+  --coachmark-previous-x: -0.5rem;
+}
+
+.Viewport[data-activation-direction~="left"] {
+  --coachmark-current-x: -0.5rem;
+  --coachmark-previous-x: 0.5rem;
+}
+
+.Viewport[data-activation-direction~="down"] {
+  --coachmark-current-y: 0.5rem;
+  --coachmark-previous-y: -0.5rem;
+}
+
+.Viewport[data-activation-direction~="up"] {
+  --coachmark-current-y: -0.5rem;
+  --coachmark-previous-y: 0.5rem;
+}
+
+.Viewport
+  > [data-current][data-starting-style] {
+  opacity: 0;
+  transform: translate(
+    var(--coachmark-current-x),
+    var(--coachmark-current-y)
+  );
+}
+
+.Viewport
+  > [data-previous][data-ending-style] {
+  opacity: 0;
+  transform: translate(
+    var(--coachmark-previous-x),
+    var(--coachmark-previous-y)
+  );
+}
+
+.Arrow {
+  width: 0.75rem;
+  height: 0.375rem;
+  overflow: hidden;
+}
+
+.Arrow::before {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: calc(0.375rem * 1.414);
+  height: calc(0.375rem * 1.414);
+  border: 1px solid rgb(0 0 0 / 12%);
+  background: Canvas;
+  content: "";
+  transform: translate(-50%, 50%) rotate(45deg);
+}
+
+.Arrow[data-side="top"] {
+  bottom: -0.375rem;
+  transform: rotate(180deg);
+}
+
+.Arrow[data-side="bottom"] {
+  top: -0.375rem;
+}
+
+.Arrow[data-side="left"] {
+  right: -0.5625rem;
+  transform: rotate(90deg);
+}
+
+.Arrow[data-side="right"] {
+  left: -0.5625rem;
+  transform: rotate(-90deg);
+}
+
+.Positioner:where(.transitionFade),
+.Popup:where(.transitionFade) {
+  transition: opacity 180ms ease-out;
+}
+
+.Backdrop:where(.transitionFade) {
+  transition: opacity 180ms ease-out;
+}
+
+.Backdrop:where(.transitionFade):is(
+    [data-motion-state="entering"],
+    [data-motion-state="exiting"],
+    [data-motion-state="repositioning"]
+  ) {
+  --coachmark-cutout-path: none;
+}
+
+.Backdrop[data-concealed] {
+  transition: none;
+}
+
+.Positioner:where(.transitionFade):is(
+    [data-motion-state="entering"],
+    [data-motion-state="exiting"],
+    [data-motion-state="repositioning"]
+  ),
+.Popup:where(.transitionFade):is(
+    [data-motion-state="entering"],
+    [data-motion-state="exiting"],
+    [data-motion-state="repositioning"]
+  ) {
+  opacity: 0;
+}
+
+.Popup:where(.transitionFade):is(
+    [data-starting-style],
+    [data-ending-style],
+    [data-motion-state="entering"],
+    [data-motion-state="exiting"],
+    [data-motion-state="repositioning"]
+  ) {
+  transform: none;
+}
+
+.Backdrop:where(.transitionNone),
+.Positioner:where(.transitionNone),
+.Popup:where(.transitionNone) {
+  transition: none;
+}
+
+.Positioner[data-motion-state="exiting"],
+.Popup[data-motion-state="exiting"],
+.Backdrop[data-ending-style],
+.Popup[data-ending-style] {
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.Stepper {
+  color: color-mix(in srgb, CanvasText 58%, transparent);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.Content {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.Actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.Navigation {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.Title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.Description {
+  margin: 0;
+  color: color-mix(in srgb, CanvasText 68%, transparent);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .Backdrop,
+  .Positioner,
+  .Popup,
+  .Viewport > [data-current],
+  .Viewport > [data-previous] {
+    transition: none;
+  }
+}

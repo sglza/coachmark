@@ -1,0 +1,95 @@
+{
+  "name": "coachmark",
+  "version": "0.0.2",
+  "description": "Accessible React coachmark tours built on Base UI Popover.",
+  "keywords": [
+    "react",
+    "coachmark",
+    "product-tour",
+    "onboarding",
+    "popover",
+    "base-ui"
+  ],
+  "homepage": "https://github.com/sglza/coachmark#readme",
+  "bugs": {
+    "url": "https://github.com/sglza/coachmark/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sglza/coachmark.git"
+  },
+  "license": "MIT",
+  "author": "Santiago (https://github.com/sglza)",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup",
+    "check": "pnpm run typecheck && pnpm run test",
+    "dev": "pnpm run build && concurrently -k -n library,playground -c cyan,magenta \"pnpm run dev:library\" \"pnpm run dev:playground\"",
+    "dev:library": "tsup --watch",
+    "dev:playground": "vite --config dev/vite.config.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run check && pnpm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "dependencies": {
+    "@base-ui/react": "1.7.0"
+  },
+  "peerDependencies": {
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "4.7.0",
+    "@wooorm/starry-night": "3.10.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "concurrently": "9.2.4",
+    "jsdom": "26.1.0",
+    "lucide": "1.30.0",
+    "lucide-react": "1.30.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "3.6.0",
+    "tailwindcss": "4.3.3",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vite": "6.4.3",
+    "vitest": "4.1.10"
+  }
+}
