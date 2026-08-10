@@ -12,7 +12,8 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "coachmark": ["./src/index.ts"]
     },
     "skipLibCheck": true,
     "strict": true,
