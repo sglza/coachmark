@@ -7,7 +7,7 @@ Accessible, unstyled React coachmark tours built on [Base UI Popover](https://ba
 ## Install
 
 ```sh
-pnpm add coachmark@next
+pnpm add coachmark
 ```
 
 `react` and `react-dom` ≥18 are required peer dependencies.
