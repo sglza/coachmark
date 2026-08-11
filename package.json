@@ -1,6 +1,6 @@
 {
   "name": "coachmark",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Accessible React coachmark tours built on Base UI Popover.",
   "keywords": [
     "react",
@@ -57,8 +57,7 @@
     "node": ">=18"
   },
   "publishConfig": {
-    "access": "public",
-    "tag": "next"
+    "access": "public"
   },
   "packageManager": "pnpm@9.15.9",
   "dependencies": {
