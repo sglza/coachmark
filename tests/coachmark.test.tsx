@@ -469,8 +469,12 @@ describe("Coachmark", () => {
     const user = userEvent.setup();
     const onStepChange = vi.fn();
     render(<Fixture onStepChange={onStepChange} />);
-    const firstTarget = screen.getByRole("button", { name: "First target" });
-    const secondTarget = screen.getByRole("button", { name: "Second target" });
+    const firstTarget = screen.getByRole("button", {
+      name: "First target",
+    });
+    const secondTarget = screen.getByRole("button", {
+      name: "Second target",
+    });
     const firstScroll = mockScrollIntoView(firstTarget);
     const secondScroll = mockScrollIntoView(secondTarget);
     mockElementRect(firstTarget, { height: 40, width: 120, x: 20, y: 20 });
@@ -636,6 +640,39 @@ describe("Coachmark", () => {
     await waitFor(() =>
       expect(positioner).toHaveAttribute("data-motion-state", "idle"),
     );
+  });
+
+  it("does not wait for motion inside the popup before changing steps", async () => {
+    const user = userEvent.setup();
+    const onStepChange = vi.fn();
+    render(<Fixture onStepChange={onStepChange} />);
+    const firstTarget = screen.getByRole("button", { name: "First target" });
+    const secondTarget = screen.getByRole("button", { name: "Second target" });
+    mockElementRect(firstTarget, { height: 40, width: 120, x: 20, y: 20 });
+    mockElementRect(secondTarget, { height: 40, width: 120, x: 300, y: 200 });
+    mockScrollIntoView(firstTarget);
+    mockScrollIntoView(secondTarget);
+
+    await user.click(screen.getByRole("button", { name: "Start tour" }));
+    await screen.findByRole("dialog", { name: "First feature" });
+
+    const nextButton = screen.getByRole("button", { name: "Next" });
+    Object.defineProperty(nextButton, "getAnimations", {
+      configurable: true,
+      value: () => [
+        {
+          finished: new Promise<void>(() => {}),
+          playState: "running",
+        },
+      ],
+    });
+
+    await user.click(nextButton);
+
+    expect(
+      await screen.findByRole("dialog", { name: "Second feature" }),
+    ).toBeInTheDocument();
+    expect(onStepChange).toHaveBeenLastCalledWith(1);
   });
 
   it("morphs viewport content and exposes its activation direction", async () => {

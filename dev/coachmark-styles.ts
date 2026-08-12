@@ -64,6 +64,11 @@ const tailwindTransitions = {
     popup: "[transition:none]",
     positioner: "[transition:none]",
   },
+  "viewport-only": {
+    backdrop: "[transition:none]",
+    popup: "[transition:none]",
+    positioner: "[transition:none]",
+  },
 } as const;
 
 const tailwindSizes: Record<CoachmarkSize, string> = {
@@ -80,13 +85,16 @@ export function getCoachmarkClassNames(
   config: Pick<PlaygroundConfig, "transition" | "viewport">,
   size: CoachmarkSize,
 ): CoachmarkClassNames {
-  const viewportEnabled = config.viewport && config.transition === "move";
+  const viewportEnabled =
+    config.viewport &&
+    (config.transition === "move" || config.transition === "viewport-only");
 
   if (stylingMode === "css-modules") {
     const transition = {
       fade: styles.transitionFade,
       move: styles.transitionMove,
       none: styles.transitionNone,
+      "viewport-only": styles.transitionViewportOnly,
     }[config.transition];
     const viewport = viewportEnabled ? styles.withViewport : "";
     const sizeClass = {
@@ -115,7 +123,9 @@ export function getCoachmarkClassNames(
     ? "h-[var(--positioner-height,max-content)] w-[var(--positioner-width,max-content)]"
     : "";
   const viewportPopup = viewportEnabled
-    ? "h-[var(--popup-height,auto)] w-[var(--popup-width,var(--coachmark-step-width))] [transition:width_240ms_ease-in-out,height_240ms_ease-in-out,opacity_180ms_ease-out,transform_180ms_ease-out]"
+    ? config.transition === "viewport-only"
+      ? "h-[var(--popup-height,auto)] w-[var(--popup-width,var(--coachmark-step-width))] [transition:none]"
+      : "h-[var(--popup-height,auto)] w-[var(--popup-width,var(--coachmark-step-width))] [transition:width_240ms_ease-in-out,height_240ms_ease-in-out,opacity_180ms_ease-out,transform_180ms_ease-out]"
     : "";
 
   return {
@@ -140,7 +150,7 @@ export function getCoachmarkClassNames(
       tailwindBase.positioner,
       transition.positioner,
       viewportPositioner,
-      viewportEnabled
+      viewportEnabled && config.transition === "move"
         ? "[transition:top_240ms_ease-in-out,left_240ms_ease-in-out,transform_240ms_ease-in-out,opacity_180ms_ease-out]"
         : "",
       "motion-reduce:[transition:none]",

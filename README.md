@@ -1,8 +1,8 @@
-# coachmark
+# Coachmark
 
-Accessible, unstyled React coachmark tours built on [Base UI Popover](https://base-ui.com/react/components/popover).
+An accessible, unstyled React coachmark primitive for product tours, built on top of [Base UI Popover](https://base-ui.com/react/components/popover).
 
-> Coachmark is pre-stable. Install the `next` release while the API is being shaped.
+[Read more](https://sglza.xyz/coachmark)
 
 ## Install
 

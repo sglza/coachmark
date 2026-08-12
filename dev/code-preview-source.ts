@@ -22,7 +22,9 @@ export function createTsxSource(
     stylingMode === "css-modules"
       ? getCssModulePreviewClassNames(config)
       : getCoachmarkClassNames(stylingMode, config, "medium");
-  const viewportEnabled = config.viewport && config.transition === "move";
+  const viewportEnabled =
+    config.viewport &&
+    (config.transition === "move" || config.transition === "viewport-only");
   const writer = new SourceWriter();
 
   writer.line('import { useRef } from "react";');
@@ -237,9 +239,13 @@ function getCssModulePreviewClassNames(
     fade: "transitionFade",
     move: "transitionMove",
     none: "transitionNone",
+    "viewport-only": "transitionViewportOnly",
   }[config.transition];
   const viewport =
-    config.viewport && config.transition === "move" ? "withViewport" : "";
+    config.viewport &&
+    (config.transition === "move" || config.transition === "viewport-only")
+      ? "withViewport"
+      : "";
   const withTransition = (base: string) =>
     [base, transition].filter(Boolean).join(" ");
   const withViewport = (base: string) =>

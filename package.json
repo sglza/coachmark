@@ -1,6 +1,6 @@
 {
   "name": "coachmark",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Accessible React coachmark tours built on Base UI Popover.",
   "keywords": [
     "react",

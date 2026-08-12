@@ -649,21 +649,10 @@ async function waitForRenderedMotion(
     return;
   }
 
-  const animatedElements = new Set<HTMLElement>();
-  elements.forEach((element) => {
-    if (!element) {
-      return;
-    }
-
-    animatedElements.add(element);
-    element
-      .querySelectorAll<HTMLElement>("*")
-      .forEach((descendant) => animatedElements.add(descendant));
-  });
   const animations = Array.from(
     new Set(
-      Array.from(animatedElements).flatMap((element) =>
-        typeof element.getAnimations === "function"
+      elements.flatMap((element) =>
+        element && typeof element.getAnimations === "function"
           ? element
               .getAnimations()
               .filter(

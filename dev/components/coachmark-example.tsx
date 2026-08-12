@@ -34,7 +34,9 @@ export function CoachmarkExample({
   const tabsRef = useRef<HTMLDivElement>(null);
   const metricRef = useRef<HTMLElement>(null);
   const inviteRef = useRef<HTMLButtonElement>(null);
-  const viewportEnabled = config.viewport && config.transition === "move";
+  const viewportEnabled =
+    config.viewport &&
+    (config.transition === "move" || config.transition === "viewport-only");
   const classNames = {
     compact: getCoachmarkClassNames(stylingMode, config, "compact"),
     large: getCoachmarkClassNames(stylingMode, config, "large"),

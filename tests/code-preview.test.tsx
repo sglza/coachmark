@@ -105,7 +105,29 @@ describe("CodePreview", () => {
     expect(CSS_SOURCE).toContain(".Popup.sizeCompact");
     expect(CSS_SOURCE).toContain(".transitionFade");
     expect(CSS_SOURCE).toContain(".transitionNone");
+    expect(CSS_SOURCE).toContain(".transitionViewportOnly");
     expect(CSS_SOURCE).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
+  it("generates a viewport-only diagnostic with static outer parts", () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      transition: "viewport-only" as const,
+    };
+    const cssModulesSource = createTsxSource(config, "css-modules");
+    const tailwindSource = createTsxSource(config, "tailwind");
+
+    expect(cssModulesSource).toContain("styles.transitionViewportOnly");
+    expect(cssModulesSource).toContain("styles.withViewport");
+    expect(cssModulesSource).toContain("<Coachmark.Viewport");
+    expect(tailwindSource).toContain("[transition:none]");
+    expect(tailwindSource).toContain("<Coachmark.Viewport");
+    expect(tailwindSource).toContain(
+      "[&>[data-current]]:[transition:opacity_240ms_ease-in-out,transform_240ms_ease-in-out]",
+    );
+    expect(tailwindSource).not.toContain(
+      "[transition:top_240ms_ease-in-out,left_240ms_ease-in-out,transform_240ms_ease-in-out,opacity_180ms_ease-out]",
+    );
   });
 
   it("aligns wrapped Tailwind class lists with their JSX props", () => {
@@ -138,6 +160,11 @@ describe("CodePreview", () => {
       "[transition:opacity_180ms_ease-out,transform_180ms_ease-out]",
     ],
     ["none", "transitionNone", "[transition:none]"],
+    [
+      "viewport-only",
+      "transitionViewportOnly",
+      "[transition:none]",
+    ],
   ] as const)(
     "keeps the %s transition equivalent in both generated strategies",
     (transition, moduleClass, tailwindClass) => {

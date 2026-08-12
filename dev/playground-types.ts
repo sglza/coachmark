@@ -16,7 +16,7 @@ export type PlaygroundConfig = {
   sideOffset: number;
   spotlightPadding: number;
   spotlightRadius: number;
-  transition: "fade" | "move" | "none";
+  transition: "fade" | "move" | "none" | "viewport-only";
   viewport: boolean;
 };
 

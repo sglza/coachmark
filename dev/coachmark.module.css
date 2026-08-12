@@ -88,6 +88,18 @@
     transform 180ms ease-out;
 }
 
+.Positioner.withViewport.transitionViewportOnly {
+  width: var(--positioner-width, max-content);
+  height: var(--positioner-height, max-content);
+  transition: none;
+}
+
+.Popup.withViewport.transitionViewportOnly {
+  width: var(--popup-width, var(--coachmark-step-width));
+  height: var(--popup-height, auto);
+  transition: none;
+}
+
 .Viewport {
   position: relative;
   min-width: 0;
@@ -236,7 +248,10 @@
 
 .Backdrop:where(.transitionNone),
 .Positioner:where(.transitionNone),
-.Popup:where(.transitionNone) {
+.Popup:where(.transitionNone),
+.Backdrop:where(.transitionViewportOnly),
+.Positioner:where(.transitionViewportOnly),
+.Popup:where(.transitionViewportOnly) {
   transition: none;
 }
 

@@ -68,6 +68,7 @@ export function ConfigControls({
           }
           options={[
             ["move", "Move"],
+            ["viewport-only", "Viewport only"],
             ["fade", "Fade"],
             ["none", "None"],
           ]}
@@ -99,7 +100,10 @@ export function ConfigControls({
         />
         <SwitchControl
           checked={config.viewport}
-          disabled={config.transition !== "move"}
+          disabled={
+            config.transition !== "move" &&
+            config.transition !== "viewport-only"
+          }
           label="Viewport morph"
           onChange={(checked) => update("viewport", checked)}
         />
