@@ -65,6 +65,16 @@ export function CoachmarkExample({
         <Coachmark
           key={sessionKey}
           modal={config.modal}
+          onOpenChange={(nextOpen, details) => {
+            if (
+              config.keepOpenOnOutsideInteraction &&
+              !nextOpen &&
+              (details.reason === "outside-press" ||
+                details.reason === "focus-out")
+            ) {
+              details.cancel();
+            }
+          }}
           resetOnOpen={config.resetOnOpen}
         >
           <CoachmarkTrigger render={<Button size="sm">Start tour</Button>} />

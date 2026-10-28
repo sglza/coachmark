@@ -40,6 +40,17 @@ export function createTsxSource(
   writer.line("<Coachmark.Root", 2);
   writer.line(formatValueProp("modal", config.modal), 3);
   writer.line(formatValueProp("resetOnOpen", config.resetOnOpen), 3);
+  if (config.keepOpenOnOutsideInteraction) {
+    writer.line("onOpenChange={(nextOpen, details) => {", 3);
+    writer.line("if (", 4);
+    writer.line("!nextOpen &&", 5);
+    writer.line('(details.reason === "outside-press" ||', 5);
+    writer.line('details.reason === "focus-out")', 6);
+    writer.line(") {", 4);
+    writer.line("details.cancel();", 5);
+    writer.line("}", 4);
+    writer.line("}}", 3);
+  }
   writer.line(">", 2);
   writer.line("<Coachmark.Trigger>Start tour</Coachmark.Trigger>", 3);
 

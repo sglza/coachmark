@@ -10,6 +10,7 @@ export type PlaygroundConfig = {
   alignOffset: number;
   arrow: boolean;
   backdrop: boolean;
+  keepOpenOnOutsideInteraction: boolean;
   modal: NonNullable<CoachmarkProps["modal"]>;
   resetOnOpen: boolean;
   side: NonNullable<CoachmarkPositionerProps["side"]>;
