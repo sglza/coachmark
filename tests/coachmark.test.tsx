@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef, useRef } from "react";
+import { createRef, useLayoutEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   Coachmark,
@@ -18,7 +18,9 @@ import {
   CoachmarkTitle,
   CoachmarkTrigger,
   CoachmarkViewport,
+  useCoachmark,
 } from "../src";
+import type { CoachmarkProps, CoachmarkRenderState } from "../src";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -41,6 +43,84 @@ function mockScrollIntoView(element: Element) {
     value: scrollIntoView,
   });
   return scrollIntoView;
+}
+
+function CallbackFixture({
+  mode = "uncontrolled",
+  defaultOpen = true,
+  onOpenChange,
+  actions,
+  twoSteps = false,
+  ...props
+}: Omit<CoachmarkProps, "children" | "open"> & {
+  mode?: "uncontrolled" | "accept" | "decline";
+  actions?: { current: CoachmarkRenderState | null };
+  twoSteps?: boolean;
+}) {
+  const target = useRef<HTMLButtonElement>(null);
+  const secondTarget = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <>
+      <button ref={target} type="button">
+        Callback target
+      </button>
+      {twoSteps && (
+        <button ref={secondTarget} type="button">
+          Callback second target
+        </button>
+      )}
+      <Coachmark.Root
+        defaultOpen={defaultOpen}
+        modal={false}
+        scrollIntoView={false}
+        {...props}
+        open={mode === "uncontrolled" ? undefined : open}
+        onOpenChange={(nextOpen, details) => {
+          onOpenChange?.(nextOpen, details);
+          if (mode === "accept" && !details.isCanceled) {
+            setOpen(nextOpen);
+          }
+        }}
+      >
+        <Coachmark.Trigger>Start callback tour</Coachmark.Trigger>
+        <CallbackProbe actions={actions} />
+        {(twoSteps ? [0, 1] : [0]).map((index) => (
+          <Coachmark.Step
+            key={index}
+            target={index === 0 ? target : secondTarget}
+          >
+            <Coachmark.Positioner>
+              <Coachmark.Popup>
+                <Coachmark.Title>Callback step {index + 1}</Coachmark.Title>
+                <Coachmark.Close>Dismiss callback tour</Coachmark.Close>
+                <Coachmark.Next>
+                  {({ isLastStep }) =>
+                    isLastStep ? "Finish callback tour" : "Next callback step"
+                  }
+                </Coachmark.Next>
+              </Coachmark.Popup>
+            </Coachmark.Positioner>
+          </Coachmark.Step>
+        ))}
+      </Coachmark.Root>
+    </>
+  );
+}
+
+function CallbackProbe({
+  actions,
+}: {
+  actions?: { current: CoachmarkRenderState | null };
+}) {
+  const state = useCoachmark();
+  useLayoutEffect(() => {
+    if (actions) {
+      actions.current = state;
+    }
+  }, [actions, state]);
+  return <span data-testid="callback-step">{state.stepIndex}</span>;
 }
 
 function Fixture({
@@ -1096,6 +1176,342 @@ describe("Coachmark", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
+
+  it.each(["uncontrolled", "accept"] as const)(
+    "notifies on final Next and stays closed in %s mode",
+    async (mode) => {
+      const onOpenChange = vi.fn();
+      render(<CallbackFixture mode={mode} onOpenChange={onOpenChange} />);
+      const finish = await screen.findByRole("button", {
+        name: "Finish callback tour",
+      });
+      await waitFor(() =>
+        expect(finish).toHaveAttribute("data-motion-state", "idle"),
+      );
+
+      fireEvent.click(finish);
+
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+      expect(onOpenChange).toHaveBeenCalledWith(
+        false,
+        expect.objectContaining({
+          action: "finish",
+          reason: "imperative-action",
+          event: expect.any(Event),
+          isCanceled: false,
+        }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+      expect(
+        screen.getByRole("button", { name: "Start callback tour" }),
+      ).toHaveFocus();
+    },
+  );
+
+  describe.each(["uncontrolled", "accept"] as const)(
+    "%s hook actions",
+    (mode) => {
+      it.each(["close", "finish", "next"] as const)(
+        "notifies when %s closes the tour and ignores calls after closing",
+        async (action) => {
+          const actions = createRef<CoachmarkRenderState>();
+          const onOpenChange = vi.fn();
+          const onStepChange = vi.fn();
+          render(
+            <CallbackFixture
+              actions={actions}
+              mode={mode}
+              onOpenChange={onOpenChange}
+              onStepChange={onStepChange}
+              defaultStepIndex={action === "next" ? 1 : 0}
+              twoSteps
+            />,
+          );
+          await screen.findByRole("dialog");
+
+          act(() => actions.current![action]());
+
+          expect(onOpenChange).toHaveBeenCalledTimes(1);
+          expect(onOpenChange).toHaveBeenLastCalledWith(
+            false,
+            expect.objectContaining({
+              action: action === "close" ? "close" : "finish",
+              reason: "imperative-action",
+              event: expect.any(Event),
+            }),
+          );
+          await waitFor(() =>
+            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+          );
+          expect(screen.getByTestId("callback-step")).toHaveTextContent(
+            action === "close" ? "0" : "1",
+          );
+          if (action === "close") {
+            expect(onStepChange).not.toHaveBeenCalled();
+          }
+
+          act(() => {
+            actions.current!.close();
+            actions.current!.finish();
+            actions.current!.next();
+          });
+          expect(onOpenChange).toHaveBeenCalledTimes(1);
+        },
+      );
+
+      it.each(["close", "finish"] as const)(
+        "honors cancellation of hook %s",
+        async (action) => {
+          const actions = createRef<CoachmarkRenderState>();
+          const onOpenChange = vi.fn<
+            NonNullable<CoachmarkProps["onOpenChange"]>
+          >((_open, details) => details.cancel());
+          const onStepChange = vi.fn();
+          render(
+            <CallbackFixture
+              actions={actions}
+              mode={mode}
+              onOpenChange={onOpenChange}
+              onStepChange={onStepChange}
+              twoSteps
+            />,
+          );
+          const dialog = await screen.findByRole("dialog");
+
+          act(() => actions.current![action]());
+
+          expect(onOpenChange).toHaveBeenCalledTimes(1);
+          expect(onOpenChange.mock.calls[0][1].isCanceled).toBe(true);
+          expect(screen.getByRole("dialog")).toBe(dialog);
+          expect(screen.getByTestId("callback-step")).toHaveTextContent("0");
+          expect(onStepChange).not.toHaveBeenCalled();
+
+          onOpenChange.mockImplementation(() => {});
+          act(() => actions.current![action]());
+          await waitFor(() =>
+            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+          );
+          expect(onOpenChange).toHaveBeenCalledTimes(2);
+        },
+      );
+
+      it("honors cancellation of final Next and ordinary Close", async () => {
+        const onOpenChange = vi.fn<NonNullable<CoachmarkProps["onOpenChange"]>>(
+          (_open, details) => details.cancel(),
+        );
+        render(<CallbackFixture mode={mode} onOpenChange={onOpenChange} />);
+        const dialog = await screen.findByRole("dialog");
+
+        fireEvent.click(
+          screen.getByRole("button", { name: "Finish callback tour" }),
+        );
+        fireEvent.click(
+          screen.getByRole("button", { name: "Dismiss callback tour" }),
+        );
+
+        expect(onOpenChange).toHaveBeenCalledTimes(2);
+        expect(onOpenChange.mock.calls[0][1].action).toBe("finish");
+        expect(onOpenChange.mock.calls[1][1].action).toBeUndefined();
+        expect(onOpenChange.mock.calls[1][1].reason).toBe("close-press");
+        expect(screen.getByRole("dialog")).toBe(dialog);
+      });
+    },
+  );
+
+  it("coalesces repeated uncontrolled close requests in the same batch", async () => {
+    const actions = createRef<CoachmarkRenderState>();
+    const onOpenChange = vi.fn();
+    render(<CallbackFixture actions={actions} onOpenChange={onOpenChange} />);
+    await screen.findByRole("dialog");
+
+    act(() => {
+      actions.current!.finish();
+      actions.current!.finish();
+      actions.current!.close();
+    });
+
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["close", "finish", "next"] as const)(
+    "lets a controlled parent decline and retry %s without remounting the popup",
+    async (action) => {
+      const actions = createRef<CoachmarkRenderState>();
+      const onOpenChange = vi.fn();
+      render(
+        <CallbackFixture
+          actions={actions}
+          mode="decline"
+          onOpenChange={onOpenChange}
+        />,
+      );
+      const dialog = await screen.findByRole("dialog");
+      await waitFor(() => expect(actions.current?.motionState).toBe("idle"));
+
+      act(() => actions.current![action]());
+      act(() => actions.current![action]());
+
+      expect(onOpenChange).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("dialog")).toBe(dialog);
+      expect(actions.current?.motionState).toBe("idle");
+    },
+  );
+
+  it.each(["close", "escape", "outside"] as const)(
+    "preserves the %s dismissal reason without marking completion",
+    async (dismissal) => {
+      const onOpenChange = vi.fn();
+      const user = userEvent.setup();
+      render(<CallbackFixture onOpenChange={onOpenChange} />);
+      await screen.findByRole("dialog");
+
+      if (dismissal === "close") {
+        await user.click(
+          screen.getByRole("button", { name: "Dismiss callback tour" }),
+        );
+      } else if (dismissal === "escape") {
+        await user.keyboard("{Escape}");
+      } else {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Callback target" }),
+        );
+      }
+
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+      expect(onOpenChange.mock.calls[0][0]).toBe(false);
+      expect(onOpenChange.mock.calls[0][1].reason).toBe(
+        dismissal === "close"
+          ? "close-press"
+          : dismissal === "escape"
+          ? "escape-key"
+          : "outside-press",
+      );
+      expect(onOpenChange.mock.calls[0][1].action).toBeUndefined();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([true, false])(
+    "preserves resetOnOpen=%s after hook completion",
+    async (resetOnOpen) => {
+      const actions = createRef<CoachmarkRenderState>();
+      const onOpenChange = vi.fn();
+      render(
+        <CallbackFixture
+          actions={actions}
+          onOpenChange={onOpenChange}
+          resetOnOpen={resetOnOpen}
+          twoSteps
+        />,
+      );
+      await screen.findByRole("dialog");
+
+      act(() => actions.current!.finish());
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+      expect(screen.getByTestId("callback-step")).toHaveTextContent("1");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Start callback tour" }),
+      );
+
+      await screen.findByRole("dialog", {
+        name: `Callback step ${resetOnOpen ? 1 : 2}`,
+      });
+      expect(onOpenChange).toHaveBeenCalledTimes(2);
+      expect(onOpenChange.mock.calls[1][0]).toBe(true);
+      expect(onOpenChange.mock.calls[1][1].action).toBeUndefined();
+      act(() => actions.current!.finish());
+      expect(onOpenChange).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it.each(["uncontrolled", "accept"] as const)(
+    "notifies and cancels pending opening when hook close runs in %s mode",
+    async (mode) => {
+      const actions = createRef<CoachmarkRenderState>();
+      const onOpenChange = vi.fn();
+      render(
+        <CallbackFixture
+          actions={actions}
+          mode={mode}
+          onOpenChange={onOpenChange}
+          defaultOpen={false}
+          scrollIntoView
+        />,
+      );
+      const target = screen.getByRole("button", { name: "Callback target" });
+      mockElementRect(target, { height: 40, width: 100, x: 20, y: 2000 });
+      const scroll = mockScrollIntoView(target);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Start callback tour" }),
+      );
+      await waitFor(() => expect(scroll).toHaveBeenCalledOnce());
+      onOpenChange.mockClear();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+      act(() => actions.current!.close());
+      fireEvent(target, new Event("scrollend", { bubbles: true }));
+
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(
+        false,
+        expect.objectContaining({ action: "close" }),
+      );
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["close", "finish"] as const)(
+    "cancels a pending step transition when hook %s runs",
+    async (action) => {
+      const user = userEvent.setup();
+      const actions = createRef<CoachmarkRenderState>();
+      const onOpenChange = vi.fn();
+      const onStepChange = vi.fn();
+      render(
+        <CallbackFixture
+          actions={actions}
+          onOpenChange={onOpenChange}
+          onStepChange={onStepChange}
+          defaultOpen={false}
+          scrollIntoView
+          twoSteps
+        />,
+      );
+      const target = screen.getByRole("button", {
+        name: "Callback second target",
+      });
+      mockElementRect(target, { height: 40, width: 100, x: 20, y: 2000 });
+      const scroll = mockScrollIntoView(target);
+      await user.click(
+        screen.getByRole("button", { name: "Start callback tour" }),
+      );
+      await screen.findByRole("dialog");
+      await waitFor(() => expect(actions.current?.motionState).toBe("idle"));
+      onOpenChange.mockClear();
+      onStepChange.mockClear();
+
+      act(() => actions.current!.next());
+      await waitFor(() => expect(scroll).toHaveBeenCalledOnce());
+      act(() => actions.current![action]());
+      fireEvent(target, new Event("scrollend", { bubbles: true }));
+
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(
+        false,
+        expect.objectContaining({ action }),
+      );
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(onStepChange.mock.calls).toEqual(action === "close" ? [] : [[1]]);
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Start callback tour" }),
+        ).toHaveFocus(),
+      );
+    },
+  );
 
   it("honors the active step's initialFocus", async () => {
     const user = userEvent.setup();

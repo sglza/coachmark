@@ -22,6 +22,7 @@ export type {
   CoachmarkBackdropProps,
   CoachmarkMotionState,
   CoachmarkNextProps,
+  CoachmarkOpenChangeEventDetails,
   CoachmarkPopupProps,
   CoachmarkPositionerProps,
   CoachmarkProps,

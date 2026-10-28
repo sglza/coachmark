@@ -44,6 +44,11 @@ export type CoachmarkMotionState =
   | "idle"
   | "repositioning";
 
+export type CoachmarkOpenChangeEventDetails = Popover.Root.ChangeEventDetails & {
+  /** Present for final Next and the hook's close/finish actions. */
+  action?: "close" | "finish";
+};
+
 export interface CoachmarkProps {
   /** A trigger, optional backdrop, and one or more CoachmarkStep children. */
   children: ReactNode;
@@ -51,7 +56,7 @@ export interface CoachmarkProps {
   defaultOpen?: boolean;
   onOpenChange?: (
     open: boolean,
-    details: Popover.Root.ChangeEventDetails,
+    details: CoachmarkOpenChangeEventDetails,
   ) => void;
   stepIndex?: number;
   defaultStepIndex?: number;
@@ -1427,6 +1432,8 @@ export function CoachmarkRoot({
   resetOnOpen = true,
   scrollIntoView = true,
 }: CoachmarkProps): ReactElement {
+  const popoverActionsRef = useRef<Popover.Root.Actions | null>(null);
+  const closeActionRef = useRef<"close" | "finish" | undefined>(undefined);
   const backdropMotionRef = useRef<HTMLElement | null>(null);
   const popupMotionRef = useRef<HTMLElement | null>(null);
   const positionerMotionRef = useRef<HTMLElement | null>(null);
@@ -1444,6 +1451,10 @@ export function CoachmarkRoot({
     value: open,
     defaultValue: defaultOpen,
   });
+  const resolvedOpenRef = useRef(resolvedOpen);
+  useLayoutEffect(() => {
+    resolvedOpenRef.current = resolvedOpen;
+  }, [resolvedOpen]);
   const [resolvedStepIndex, setResolvedStepIndex] = useControllableState({
     value: stepIndex,
     defaultValue: defaultStepIndex,
@@ -1669,18 +1680,22 @@ export function CoachmarkRoot({
       updateStep,
     ],
   );
-  const close = useCallback(() => {
-    abortOpenPreparation();
-    abortStepTransition();
-    setActivationDirection(undefined);
-    setPresentedOpen(false);
-    setPhase("closed");
-    setResolvedOpen(false);
-  }, [abortOpenPreparation, abortStepTransition, setResolvedOpen]);
+  const requestClose = useCallback((action: "close" | "finish") => {
+    if (!resolvedOpenRef.current || closeActionRef.current) {
+      return;
+    }
+
+    closeActionRef.current = action;
+    try {
+      popoverActionsRef.current?.close();
+    } finally {
+      closeActionRef.current = undefined;
+    }
+  }, []);
+  const close = useCallback(() => requestClose("close"), [requestClose]);
   const finish = useCallback(() => {
-    updateStep(stepCount - 1);
-    close();
-  }, [close, stepCount, updateStep]);
+    requestClose("finish");
+  }, [requestClose]);
   const next = useCallback(() => {
     if (safeStepIndex >= stepCount - 1) {
       finish();
@@ -1847,22 +1862,39 @@ export function CoachmarkRoot({
   return (
     <InternalCoachmarkContext.Provider value={context}>
       <Popover.Root
+        actionsRef={popoverActionsRef}
         modal={modal}
         onOpenChange={(nextOpen, details) => {
-          if (!nextOpen) {
-            abortOpenPreparation();
-            abortStepTransition();
-            setPresentedOpen(false);
-            setPhase("closed");
-          }
-          if (nextOpen && resetOnOpen) {
-            updateStep(0);
-          }
-          if (nextOpen && stepCount === 0) {
+          if (!nextOpen && !resolvedOpenRef.current) {
+            details.cancel();
             return;
           }
+          if (nextOpen && stepCount === 0) {
+            details.cancel();
+            return;
+          }
+          const eventDetails: CoachmarkOpenChangeEventDetails = details;
+          if (!nextOpen && closeActionRef.current) {
+            eventDetails.action = closeActionRef.current;
+          }
+
+          onOpenChange?.(nextOpen, eventDetails);
+          if (details.isCanceled) {
+            return;
+          }
+
+          if (nextOpen && resetOnOpen) {
+            updateStep(0);
+          } else if (!nextOpen && eventDetails.action === "finish") {
+            updateStep(stepCount - 1);
+          }
+          // A controlled parent owns whether this request changes the open state.
+          // Uncontrolled requests update the ref immediately to coalesce repeated
+          // hook calls before React commits the closed state.
+          if (open === undefined) {
+            resolvedOpenRef.current = nextOpen;
+          }
           setResolvedOpen(nextOpen);
-          onOpenChange?.(nextOpen, details);
         }}
         open={presentedOpen && stepCount > 0}
       >
