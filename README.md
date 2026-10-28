@@ -326,6 +326,8 @@ pnpm dev
 
 `pnpm dev` watches the library and runs the playground. Use `pnpm check` to run type checking and tests.
 
+The [issue investigation briefs](docs/issues/github-2/README.md) preserve the context, evidence, and open questions from GitHub issue 2 for future maintenance work.
+
 ## License
 
 MIT
