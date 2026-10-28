@@ -23,6 +23,7 @@ import { flushSync } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { useRender } from "@base-ui/react/use-render";
 import { mergeProps } from "@base-ui/react/merge-props";
+import { tabbable } from "tabbable";
 
 export interface CoachmarkRenderState {
   close: () => void;
@@ -61,6 +62,10 @@ export interface CoachmarkProps {
   stepIndex?: number;
   defaultStepIndex?: number;
   onStepChange?: (index: number) => void;
+  /**
+   * Restrict interaction to the popup. Nonmodal tours permit target interaction.
+   * @default false
+   */
   modal?: Popover.Root.Props["modal"];
   /**
    * Reset to the first step whenever the tour opens.
@@ -74,6 +79,11 @@ export interface CoachmarkProps {
 export interface CoachmarkStepProps {
   /** Element highlighted and used as the popover anchor. */
   target: RefObject<HTMLElement | null>;
+  /**
+   * Additional nonmodal interaction regions, such as a target's portaled menu.
+   * These do not change the spotlight or positioning anchor.
+   */
+  interactionRefs?: readonly RefObject<HTMLElement | null>[];
   children: ReactNode;
   /**
    * Space between the target and spotlight cutout, in CSS pixels.
@@ -162,6 +172,7 @@ interface InternalCoachmarkContextValue extends CoachmarkRenderState {
   };
   open: boolean;
   phase: CoachmarkPresentationPhase;
+  triggerElements: Set<HTMLElement>;
 }
 
 type CoachmarkPresentationPhase =
@@ -828,9 +839,20 @@ function useSpotlightGeometry(
 
 export const CoachmarkTrigger = forwardRef<HTMLElement, CoachmarkTriggerProps>(
   function CoachmarkTrigger(props, forwardedRef) {
+    const triggerElements = useContext(InternalCoachmarkContext)?.triggerElements;
+    const previousElementRef = useRef<HTMLElement | null>(null);
     const mergedRef = useCallback(
-      (element: HTMLElement | null) => setRef(forwardedRef, element),
-      [forwardedRef],
+      (element: HTMLElement | null) => {
+        if (previousElementRef.current) {
+          triggerElements?.delete(previousElementRef.current);
+        }
+        previousElementRef.current = element;
+        if (element) {
+          triggerElements?.add(element);
+        }
+        setRef(forwardedRef, element);
+      },
+      [forwardedRef, triggerElements],
     );
 
     return (
@@ -1428,12 +1450,16 @@ export function CoachmarkRoot({
   stepIndex,
   defaultStepIndex = 0,
   onStepChange,
-  modal = true,
+  modal = false,
   resetOnOpen = true,
   scrollIntoView = true,
 }: CoachmarkProps): ReactElement {
   const popoverActionsRef = useRef<Popover.Root.Actions | null>(null);
   const closeActionRef = useRef<"close" | "finish" | undefined>(undefined);
+  const focusOutEventRef = useRef<FocusEvent | null>(null);
+  const triggerElements = useRef(new Set<HTMLElement>()).current;
+  const interactionGestureRef = useRef(false);
+  const interactionEvents = useRef(new WeakSet<Event>()).current;
   const backdropMotionRef = useRef<HTMLElement | null>(null);
   const popupMotionRef = useRef<HTMLElement | null>(null);
   const positionerMotionRef = useRef<HTMLElement | null>(null);
@@ -1465,6 +1491,10 @@ export function CoachmarkRoot({
   );
   const activeStepElement = steps[safeStepIndex];
   const activeStep = activeStepElement?.props ?? null;
+  const interactionStepRef = useRef(activeStep);
+  useLayoutEffect(() => {
+    interactionStepRef.current = activeStep;
+  }, [activeStep]);
   const openAbortRef = useRef<AbortController | null>(null);
   const openStepIndexRef = useRef<number | null>(null);
   const transitionAbortRef = useRef<AbortController | null>(null);
@@ -1481,6 +1511,168 @@ export function CoachmarkRoot({
     phase === "exiting" ||
     phase === "scrolling" ||
     phase === "positioning";
+
+  const isInteractionNode = useCallback(
+    (node: EventTarget | null): boolean => {
+      if (!node || !("nodeType" in node)) {
+        return false;
+      }
+      const step = interactionStepRef.current;
+      return [step?.target, ...(step?.interactionRefs ?? [])].some(
+        (ref) => ref?.current?.contains(node as Node),
+      );
+    },
+    [],
+  );
+  const isInsideTour = useCallback(
+    (node: EventTarget | null): boolean => {
+      if (!node || !("nodeType" in node)) {
+        return false;
+      }
+      return (
+        isInteractionNode(node) ||
+        popupMotionRef.current?.contains(node as Node) === true ||
+        [...triggerElements].some((element) => element.contains(node as Node))
+      );
+    },
+    [isInteractionNode, triggerElements],
+  );
+
+  useLayoutEffect(() => {
+    if (!presentedOpen || modal !== false) {
+      return;
+    }
+
+    const ownerDocument =
+      popupMotionRef.current?.ownerDocument ??
+      activeStep?.target.current?.ownerDocument ??
+      document;
+    let completedInteraction = false;
+    let disposed = false;
+    const onPointerDown = (event: PointerEvent) => {
+      completedInteraction = false;
+      interactionGestureRef.current = event.composedPath().some(isInteractionNode);
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      completedInteraction = interactionGestureRef.current;
+      if (completedInteraction) {
+        interactionEvents.add(event);
+      }
+      interactionGestureRef.current = false;
+    };
+    const onPointerCancel = () => {
+      completedInteraction = false;
+      interactionGestureRef.current = false;
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      completedInteraction = false;
+      interactionGestureRef.current = event.composedPath().some(isInteractionNode);
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      completedInteraction ||= interactionGestureRef.current;
+      if (completedInteraction) {
+        interactionEvents.add(event);
+      }
+      interactionGestureRef.current = false;
+    };
+    const onClick = (event: MouseEvent) => {
+      // Capture ownership before a menu's click handler can unmount its ref.
+      if (
+        event.composedPath().some(isInteractionNode) ||
+        (completedInteraction && event.detail !== 0)
+      ) {
+        interactionEvents.add(event);
+      }
+      completedInteraction = false;
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      if (!isInteractionNode(event.target) || !event.relatedTarget) {
+        return;
+      }
+      queueMicrotask(() => {
+        if (
+          disposed ||
+          interactionGestureRef.current ||
+          isInsideTour(ownerDocument.activeElement)
+        ) {
+          return;
+        }
+        // Reuse Base UI's close pipeline and cancellation utilities, retaining
+        // the native focus event and reason for application dismissal policies.
+        focusOutEventRef.current = event;
+        try {
+          popoverActionsRef.current?.close();
+        } finally {
+          focusOutEventRef.current = null;
+        }
+      });
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Tab" ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+      const popup = popupMotionRef.current;
+      const target = interactionStepRef.current?.target.current;
+      if (!popup || !target) {
+        return;
+      }
+      const activeElement = ownerDocument.activeElement;
+      const targetControls = tabbable(target, { includeContainer: true });
+      if (!event.shiftKey && popup.contains(activeElement)) {
+        const popupControls = tabbable(popup);
+        if (
+          activeElement === (popupControls[popupControls.length - 1] ?? popup) &&
+          targetControls[0]
+        ) {
+          event.preventDefault();
+          targetControls[0].focus();
+        }
+      } else if (event.shiftKey && activeElement === targetControls[0]) {
+        event.preventDefault();
+        // Base UI restores the popup's tab stops when its portal regains focus.
+        popup.focus({ preventScroll: true });
+        const popupControls = tabbable(popup);
+        popupControls[popupControls.length - 1]?.focus({ preventScroll: true });
+      }
+    };
+
+    ownerDocument.addEventListener("pointerdown", onPointerDown, true);
+    ownerDocument.addEventListener("pointerup", onPointerUp, true);
+    ownerDocument.addEventListener("pointercancel", onPointerCancel, true);
+    ownerDocument.addEventListener("touchstart", onTouchStart, true);
+    ownerDocument.addEventListener("touchend", onTouchEnd, true);
+    ownerDocument.addEventListener("touchcancel", onPointerCancel, true);
+    ownerDocument.addEventListener("click", onClick, true);
+    ownerDocument.addEventListener("focusout", onFocusOut);
+    ownerDocument.addEventListener("keydown", onKeyDown);
+    return () => {
+      disposed = true;
+      interactionGestureRef.current = false;
+      ownerDocument.removeEventListener("pointerdown", onPointerDown, true);
+      ownerDocument.removeEventListener("pointerup", onPointerUp, true);
+      ownerDocument.removeEventListener("pointercancel", onPointerCancel, true);
+      ownerDocument.removeEventListener("touchstart", onTouchStart, true);
+      ownerDocument.removeEventListener("touchend", onTouchEnd, true);
+      ownerDocument.removeEventListener("touchcancel", onPointerCancel, true);
+      ownerDocument.removeEventListener("click", onClick, true);
+      ownerDocument.removeEventListener("focusout", onFocusOut);
+      ownerDocument.removeEventListener("keydown", onKeyDown);
+    };
+  }, [
+    activeStep?.target,
+    interactionEvents,
+    isInsideTour,
+    isInteractionNode,
+    modal,
+    presentedOpen,
+    safeStepIndex,
+  ]);
 
   const abortOpenPreparation = useCallback(() => {
     openAbortRef.current?.abort();
@@ -1826,6 +2018,7 @@ export function CoachmarkRoot({
       stepCount,
       stepIndex: safeStepIndex,
       transitioning,
+      triggerElements,
     }),
     [
       activeStep,
@@ -1843,6 +2036,7 @@ export function CoachmarkRoot({
       stepCount,
       transitioning,
       transitionTo,
+      triggerElements,
     ],
   );
   const renderedChildren = useMemo(
@@ -1865,6 +2059,31 @@ export function CoachmarkRoot({
         actionsRef={popoverActionsRef}
         modal={modal}
         onOpenChange={(nextOpen, details) => {
+          if (!nextOpen && focusOutEventRef.current) {
+            Object.assign(details, {
+              reason: "focus-out",
+              event: focusOutEventRef.current,
+            });
+          }
+          if (!nextOpen && modal === false) {
+            const event = details.event;
+            const isTargetPress =
+              details.reason === "outside-press" &&
+              (interactionEvents.has(event) ||
+                event.composedPath().some(isInteractionNode));
+            const focusDestination =
+              event.type === "focusout"
+                ? (event as FocusEvent).relatedTarget
+                : popupMotionRef.current?.ownerDocument.activeElement;
+            const isTargetFocus =
+              details.reason === "focus-out" &&
+              (interactionGestureRef.current ||
+                isInsideTour(focusDestination ?? null));
+            if (isTargetPress || isTargetFocus) {
+              details.cancel();
+              return;
+            }
+          }
           if (!nextOpen && !resolvedOpenRef.current) {
             details.cancel();
             return;

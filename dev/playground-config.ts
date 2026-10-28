@@ -5,7 +5,7 @@ export const DEFAULT_CONFIG: PlaygroundConfig = {
   alignOffset: 0,
   arrow: true,
   backdrop: true,
-  modal: true,
+  modal: false,
   resetOnOpen: true,
   side: "bottom",
   sideOffset: 20,

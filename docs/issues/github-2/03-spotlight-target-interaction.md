@@ -9,7 +9,7 @@ A highlighted target is not automatically an allowed interaction region. Coachma
 - Source: [GitHub issue 2](https://github.com/sglza/coachmark/issues/2).
 - Recorded: October 28, 2026.
 - Baseline: commit `3404fb5f0a5e696d1e8933f48d80f221ff222c86`, Coachmark `0.1.1`, Base UI `1.7.0`.
-- Decision status: no interactive-target API or focus model selected.
+- Decision status: nonmodal tours allow target interaction; `modal` is the interaction switch, with `false` as the new default and per-step `interactionRefs` for associated portals.
 
 ## Original need and example
 
@@ -17,7 +17,7 @@ Terrain Viewer includes sliders, checkboxes, selects, and button groups. The rep
 
 For example, a step says to adjust terrain opacity. A user should be able to drag the highlighted slider while reading the explanation. If the tour closes on that interaction, the instructions disappear at the moment they are useful.
 
-## Current behavior and evidence
+## Baseline behavior and evidence
 
 [`CoachmarkRoot`](https://github.com/sglza/coachmark/blob/3404fb5f0a5e696d1e8933f48d80f221ff222c86/src/coachmark.tsx#L1418) defaults to `modal=true`. Base UI's modal popover restricts outside pointer interactions; its focus trapping also depends on the popup's close-part composition. See the [Base UI modal contract](https://base-ui.com/react/components/popover#root).
 
@@ -31,11 +31,15 @@ The report's portal concern is meaningful: a select's options may be attached to
 
 The gap prevents learning by doing. It is less clearly a broken existing promise than the finish callback, but it blocks an important category of tours. Short time windows are fragile because a slow user and a quick user should receive the same interaction rules.
 
-## Decisions still needed
+## Selected behavior and API
 
-Decide whether interaction is an opt-in policy per tour, per step, or another scope. Define whether only the target is interactive or whether associated portal content can be registered too. Determine how outside dismissal and Escape behave while a target-owned menu is open.
+Use the existing `modal` prop instead of introducing a separate interaction flag. With `modal=false`, the active target and its descendants can be operated without dismissing the current step. Additional per-step `interactionRefs` register associated content such as portaled menus; refs may initially be null and do not change the spotlight or anchor.
 
-Focus requires its own contract: keyboard and screen-reader users must be able to reach the permitted controls and return to the instructions. Setting pointer events alone does not provide that access. Preserve the existing behavior for tours that want to restrict interaction.
+Change the default to `modal=false` in a minor release. Explicit `modal=true` retains the restrictive behavior. Trap-focus mode retains Base UI's existing popup-only focus model; use nonmodal mode for keyboard access to the target.
+
+With a backdrop, unrelated pointer interactions hit the backdrop and dismiss the tour. Without one, unrelated page controls remain operable and request dismissal. Applications can cancel `outside-press` and `focus-out` through the existing `onOpenChange` API, whose cancellation handling was fixed in PR #4.
+
+Tab from the last popup control moves to the target's first tab stop, and Shift+Tab returns to the popup. Focus can continue out through the page normally. Target controls keep their arrow keys. Target-owned menus must consume Escape while open and restore focus to their controls; registered portal refs do not supply third-party keyboard handling or stacking styles.
 
 ## Proposed acceptance criteria
 
@@ -45,6 +49,6 @@ Focus requires its own contract: keyboard and screen-reader users must be able t
 - Modal defaults and pointer-interception layers are covered explicitly.
 - Pointer, keyboard, touch, and assistive-technology behavior receive appropriate verification.
 
-## Resuming this work
+## Verification
 
-Use a slider and a portaled select as separate browser reproductions. Include a Close button when checking the Base UI focus behavior so composition is intentional. Coordinate with [keyboard navigation](07-keyboard-step-navigation.md): arrow keys used to adjust a control must not unexpectedly advance the tour.
+Regression coverage exercises target operations, late-mounted portals, controlled state, dismissal cancellation, keyboard focus, pointer and touch gestures, step changes, and explicit modal modes. Browser verification uses a controlled slider and a portaled Base UI select, including backdrop hit testing, nested Escape, touch interaction, and keyboard exit to the page. Direct assistive-technology testing remains separate from DOM accessibility checks. Coordinate future [keyboard navigation](07-keyboard-step-navigation.md) with these controls so their arrow keys do not advance the tour.

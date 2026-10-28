@@ -93,7 +93,7 @@ Controls the tour's open state and active step. It does not render a DOM element
 | `stepIndex` | `number` | — | Controls the active step. |
 | `defaultStepIndex` | `number` | `0` | Sets the initial step when uncontrolled. |
 | `onStepChange` | `(index) => void` | — | Called when the active step changes. |
-| `modal` | `boolean \| "trap-focus"` | `true` | Configures Base UI's modal and focus-trapping behavior. |
+| `modal` | `boolean \| "trap-focus"` | `false` | Configures Base UI's modal and focus-trapping behavior. Nonmodal tours allow target interaction without dismissing the step. |
 | `resetOnOpen` | `boolean` | `true` | Resets the tour to its first step whenever it opens. |
 | `scrollIntoView` | `boolean \| ScrollIntoViewOptions` | `true` | Configures automatic scrolling for offscreen targets. |
 
@@ -116,6 +116,34 @@ Use the action to distinguish completion from early dismissal:
 ```
 
 Call `details.cancel()` to prevent a request, including its step changes. A controlled tour stays open until its parent supplies `open={false}`. Each action while it remains open can request closing again; completion metadata describes the request. Persist completion when accepting it. Uncontrolled tours ignore repeated close/finish calls after an accepted close, including calls in the same batch. Opening the tour again allows a new completion request.
+
+Tours are nonmodal by default. Users can click, drag, type, and move focus between the active target and the popup while keeping the step open. Target interaction does not advance the tour. The target remains available to assistive technology, and its arrow keys retain their normal behavior.
+
+Tab from the last popup control moves to the target's first tab stop; Shift+Tab from that tab stop returns to the popup's last control. Tabbing past the target's remaining controls continues through the page normally and can dismiss the tour. Nonmodal tours do not trap focus.
+
+With a styled `Backdrop`, presses outside the spotlight hit the backdrop and dismiss the tour without activating underlying controls. Without a backdrop, unrelated page controls work normally and request dismissal. Leaving the target or popup with keyboard focus can also request dismissal. To keep a tour open while users explore the page, cancel both outside-press and focus-out requests:
+
+```tsx
+<Coachmark.Root
+  modal={false}
+  onOpenChange={(open, details) => {
+    if (
+      !open &&
+      (details.reason === "outside-press" || details.reason === "focus-out")
+    ) {
+      details.cancel();
+    }
+  }}
+>
+  {/* Trigger and steps; Backdrop is optional */}
+</Coachmark.Root>
+```
+
+Escape, Close, and Finish still request dismissal. Target-owned menus should handle and stop propagation of Escape while open, returning focus to their control; a subsequent Escape can then close the tour. Recognized nested Base UI popups retain Base UI's dismissal behavior.
+
+Set `modal={true}` to block interaction outside the popup and use Base UI's modal focus management. `modal="trap-focus"` permits outside pointer interaction while retaining popup focus trapping; use `modal={false}` for keyboard-accessible target interaction. Include a `Coachmark.Close` inside the popup when using focus trapping.
+
+**Migration:** the default changed from `modal={true}` to `modal={false}`. Add `modal={true}` to retain the previous restrictive behavior.
 
 ### Trigger
 
@@ -156,10 +184,21 @@ Defines one target and its content. It does not render a DOM element. Steps must
 | Prop | Type | Default | Description |
 | --- | --- | --- | --- |
 | `target` | `RefObject<HTMLElement \| null>` | — | Element highlighted and used as the positioner anchor. |
+| `interactionRefs` | `readonly RefObject<HTMLElement \| null>[]` | — | Additional regions that keep a nonmodal step open, such as a target's portaled menu. |
 | `children` | `ReactNode` | — | The positioner and popup for this step. |
 | `spotlightPadding` | `number` | `8` | Space around the spotlight cutout in CSS pixels. |
 | `spotlightRadius` | `number` | `0` | Corner radius of the spotlight cutout in CSS pixels. |
 | `scrollIntoView` | `boolean \| ScrollIntoViewOptions` | Inherited | Overrides automatic scrolling for this step. |
+
+In nonmodal mode, the target and its descendants are automatically allowed interaction regions. Register associated portal content with `interactionRefs`; refs may initially be null and are read when interactions occur. These regions do not change the spotlight or popup anchor:
+
+```tsx
+<Coachmark.Step target={selectRef} interactionRefs={[selectPopupRef]}>
+  {/* Positioner and popup */}
+</Coachmark.Step>
+```
+
+Render associated menus above the backdrop, using your application's stacking styles. Refs establish dismissal and focus ownership; they do not alter the menu's styling, keyboard behavior, or focus restoration. Only the active step's refs apply. Spotlight padding is visual and does not register neighboring elements for interaction. In modal and trap-focus modes, `interactionRefs` do not expand Base UI's interaction boundary.
 
 ### Positioner
 

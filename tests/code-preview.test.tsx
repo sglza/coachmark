@@ -62,7 +62,7 @@ describe("CodePreview", () => {
     expect(source).toContain('import styles from "./tour.module.css";');
 
     expect(source).toContain(`    <Coachmark.Root
-      modal
+      modal={false}
       resetOnOpen
     >`);
     expect(source).toContain(`      <Coachmark.Step
