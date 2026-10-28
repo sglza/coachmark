@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { Tabs } from "@base-ui/react/tabs";
 import {
   Coachmark,
   CoachmarkArrow,
@@ -84,7 +85,7 @@ export function CoachmarkExample({
                 <StepContent
                   arrow={config.arrow}
                   classNames={classNames.compact}
-                  description="Move between workspace views."
+                  description="Choose a view to switch the content below. Arrow keys move between tabs."
                   title="Switch between views"
                   viewport={viewportEnabled}
                 />
@@ -143,66 +144,101 @@ export function CoachmarkExample({
           </Button>
         </div>
 
-        <div className="border-border mt-6 flex gap-1 border-b" ref={tabsRef}>
-          <button
-            className="border-foreground border-b px-3 py-2 text-xs font-medium"
-            type="button"
+        <Tabs.Root defaultValue="overview">
+          <Tabs.List
+            activateOnFocus
+            aria-label="Workspace views"
+            className="border-border mt-6 flex gap-1 border-b"
+            ref={tabsRef}
           >
-            Overview
-          </button>
-          <button
-            className="text-muted-foreground px-3 py-2 text-xs"
-            type="button"
-          >
-            Activity
-          </button>
-          <button
-            className="text-muted-foreground px-3 py-2 text-xs"
-            type="button"
-          >
-            Settings
-          </button>
-        </div>
+            {[
+              ["overview", "Overview"],
+              ["activity", "Activity"],
+              ["settings", "Settings"],
+            ].map(([value, label]) => (
+              <Tabs.Tab
+                className="text-muted-foreground border-b border-transparent px-3 py-2 text-xs outline-none data-active:border-foreground data-active:font-medium data-active:text-foreground focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                key={value}
+                value={value}
+              >
+                {label}
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <article className="border-border rounded-lg border p-4">
-            <span className="text-muted-foreground text-[11px]">Members</span>
-            <strong className="mt-2 block text-xl">28</strong>
-            <small className="text-muted-foreground text-[10px]">
-              4 joined this week
-            </small>
-          </article>
-          <article
-            className="border-border rounded-lg border p-4"
-            ref={metricRef}
-          >
-            <span className="text-muted-foreground text-[11px]">
-              Activation
-            </span>
-            <strong className="mt-2 block text-xl">68%</strong>
-            <small className="text-success-foreground text-[10px]">
-              Up 6% this month
-            </small>
-          </article>
-          <article className="border-border rounded-lg border p-4">
-            <span className="text-muted-foreground text-[11px]">Pending</span>
-            <strong className="mt-2 block text-xl">6</strong>
-            <small className="text-muted-foreground text-[10px]">
-              Invitations sent
-            </small>
-          </article>
-        </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <article className="border-border rounded-lg border p-4">
+              <span className="text-muted-foreground text-[11px]">Members</span>
+              <strong className="mt-2 block text-xl">28</strong>
+              <small className="text-muted-foreground text-[10px]">
+                4 joined this week
+              </small>
+            </article>
+            <article
+              className="border-border rounded-lg border p-4"
+              ref={metricRef}
+            >
+              <span className="text-muted-foreground text-[11px]">
+                Activation
+              </span>
+              <strong className="mt-2 block text-xl">68%</strong>
+              <small className="text-success-foreground text-[10px]">
+                Up 6% this month
+              </small>
+            </article>
+            <article className="border-border rounded-lg border p-4">
+              <span className="text-muted-foreground text-[11px]">Pending</span>
+              <strong className="mt-2 block text-xl">6</strong>
+              <small className="text-muted-foreground text-[10px]">
+                Invitations sent
+              </small>
+            </article>
+          </div>
 
-        <div className="border-border mt-3 rounded-lg border">
-          <div className="border-border grid grid-cols-[1fr_auto] gap-4 border-b px-4 py-3 text-xs">
-            <span>Maya Chen</span>
-            <span className="text-muted-foreground">Admin</span>
-          </div>
-          <div className="grid grid-cols-[1fr_auto] gap-4 px-4 py-3 text-xs">
-            <span>Jon Bell</span>
-            <span className="text-muted-foreground">Member</span>
-          </div>
-        </div>
+          <Tabs.Panel
+            className="border-border mt-3 min-h-32 rounded-lg border"
+            value="overview"
+          >
+            <div className="border-border grid grid-cols-[1fr_auto] gap-4 border-b px-4 py-3 text-xs">
+              <span>Maya Chen</span>
+              <span className="text-muted-foreground">Admin</span>
+            </div>
+            <div className="grid grid-cols-[1fr_auto] gap-4 px-4 py-3 text-xs">
+              <span>Jon Bell</span>
+              <span className="text-muted-foreground">Member</span>
+            </div>
+          </Tabs.Panel>
+          <Tabs.Panel
+            className="border-border mt-3 min-h-32 rounded-lg border"
+            value="activity"
+          >
+            <ul className="divide-border divide-y text-xs">
+              <li className="grid gap-1 px-4 py-3">
+                <span>Maya invited Jon to the workspace.</span>
+                <span className="text-muted-foreground">Just now</span>
+              </li>
+              <li className="grid gap-1 px-4 py-3">
+                <span>Jon completed onboarding.</span>
+                <span className="text-muted-foreground">2 hours ago</span>
+              </li>
+            </ul>
+          </Tabs.Panel>
+          <Tabs.Panel
+            className="border-border mt-3 min-h-32 rounded-lg border"
+            value="settings"
+          >
+            <dl className="divide-border divide-y text-xs">
+              <div className="flex justify-between gap-4 px-4 py-3">
+                <dt>Workspace access</dt>
+                <dd className="text-muted-foreground">Invite only</dd>
+              </div>
+              <div className="flex justify-between gap-4 px-4 py-3">
+                <dt>Default teammate role</dt>
+                <dd className="text-muted-foreground">Member</dd>
+              </div>
+            </dl>
+          </Tabs.Panel>
+        </Tabs.Root>
       </div>
     </section>
   );
