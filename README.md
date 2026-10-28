@@ -89,13 +89,33 @@ Controls the tour's open state and active step. It does not render a DOM element
 | `children` | `ReactNode` | — | A trigger, optional backdrop, and one or more steps. |
 | `open` | `boolean` | — | Controls whether the tour is open. |
 | `defaultOpen` | `boolean` | `false` | Sets the initial open state when uncontrolled. |
-| `onOpenChange` | `(open, details) => void` | — | Called when the open state changes. |
+| `onOpenChange` | `(open, details) => void` | — | Called when an interaction or hook action requests an open-state change. |
 | `stepIndex` | `number` | — | Controls the active step. |
 | `defaultStepIndex` | `number` | `0` | Sets the initial step when uncontrolled. |
 | `onStepChange` | `(index) => void` | — | Called when the active step changes. |
 | `modal` | `boolean \| "trap-focus"` | `true` | Configures Base UI's modal and focus-trapping behavior. |
 | `resetOnOpen` | `boolean` | `true` | Resets the tour to its first step whenever it opens. |
 | `scrollIntoView` | `boolean \| ScrollIntoViewOptions` | `true` | Configures automatic scrolling for offscreen targets. |
+
+`onOpenChange` receives `CoachmarkOpenChangeEventDetails`, which preserves Base UI's event details and adds an optional `action`. Final Next and `useCoachmark().finish()` set `details.action` to `"finish"`; hook `close()` sets it to `"close"`. These actions use Base UI's `"imperative-action"` reason and a generated `Event`, including when Finish is clicked. Close, Skip, Escape, and outside press retain their Base UI reasons and have no `action`.
+
+Use the action to distinguish completion from early dismissal:
+
+```tsx
+<Coachmark.Root
+  open={open}
+  onOpenChange={(nextOpen, details) => {
+    setOpen(nextOpen);
+    if (!nextOpen && details.action === "finish") {
+      localStorage.setItem("tour-seen", "true");
+    }
+  }}
+>
+  {/* Trigger and steps */}
+</Coachmark.Root>
+```
+
+Call `details.cancel()` to prevent a request, including its step changes. A controlled tour stays open until its parent supplies `open={false}`. Each action while it remains open can request closing again; completion metadata describes the request. Persist completion when accepting it. Uncontrolled tours ignore repeated close/finish calls after an accepted close, including calls in the same batch. Opening the tour again allows a new completion request.
 
 ### Trigger
 
@@ -327,6 +347,12 @@ pnpm dev
 `pnpm dev` watches the library and runs the playground. Use `pnpm check` to run type checking and tests.
 
 The [issue investigation briefs](docs/issues/github-2/README.md) preserve the context, evidence, and open questions from GitHub issue 2 for future maintenance work.
+
+### Releases
+
+Run `pnpm changeset` with each user-facing change and commit the generated release note with your PR. Changes accumulate in a draft release PR; merge it when the batch is ready to publish. Use `pnpm changeset status` to inspect the pending release without publishing.
+
+See the [release guide](.changeset/README.md) for the full workflow and one-time GitHub/npm setup.
 
 ## License
 

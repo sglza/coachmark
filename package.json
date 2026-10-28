@@ -45,13 +45,16 @@
   },
   "scripts": {
     "build": "tsup",
+    "changeset": "changeset",
     "check": "pnpm run typecheck && pnpm run test",
     "dev": "pnpm run build && concurrently -k -n library,playground -c cyan,magenta \"pnpm run dev:library\" \"pnpm run dev:playground\"",
     "dev:library": "tsup --watch",
     "dev:playground": "vite --config dev/vite.config.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run check && pnpm run build"
+    "prepublishOnly": "pnpm run check && pnpm run build",
+    "release": "changeset publish",
+    "version-packages": "changeset version && pnpm install --lockfile-only"
   },
   "engines": {
     "node": ">=18"
@@ -68,6 +71,7 @@
     "react-dom": ">=18 <20"
   },
   "devDependencies": {
+    "@changesets/cli": "2.31.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "7.0.0",
     "@testing-library/react": "16.3.2",
