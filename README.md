@@ -326,6 +326,12 @@ pnpm dev
 
 `pnpm dev` watches the library and runs the playground. Use `pnpm check` to run type checking and tests.
 
+### Releases
+
+Run `pnpm changeset` with each user-facing change and commit the generated release note with your PR. Changes accumulate in a draft release PR; merge it when the batch is ready to publish. Use `pnpm changeset status` to inspect the pending release without publishing.
+
+See the [release guide](.changeset/README.md) for the full workflow and one-time GitHub/npm setup.
+
 ## License
 
 MIT
