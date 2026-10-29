@@ -1,0 +1,40 @@
+name: Feature request
+description: Describe one focused improvement and the use case it would support.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please request one improvement per issue. If you have several independent ideas, open separate issues and link them where useful.
+
+        A concrete use case is more helpful than a list of new API options. Read the [contribution guidelines](https://github.com/sglza/coachmark/blob/main/CONTRIBUTING.md) for examples.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Issue scope
+      options:
+        - label: This request focuses on one improvement, and I have searched existing issues for the same request.
+          required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case and current limitation
+      description: What are you trying to do, and what makes it difficult with Coachmark today?
+    validations:
+      required: true
+  - type: textarea
+    id: desired-outcome
+    attributes:
+      label: Desired outcome
+      description: What should become possible? Keep this focused on one outcome; you do not need to design the API.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+      description: Optional. How do you handle this today, and what are the limitations?
+  - type: textarea
+    id: context
+    attributes:
+      label: Ideas and related context
+      description: Optional API suggestions, examples, or related issues that explain this same request. Keep unrelated improvements in separate issues.
