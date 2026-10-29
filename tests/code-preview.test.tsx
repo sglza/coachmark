@@ -62,7 +62,6 @@ describe("CodePreview", () => {
     expect(source).toContain('import styles from "./tour.module.css";');
 
     expect(source).toContain(`    <Coachmark.Root
-      allowTargetInteraction
       modal
       resetOnOpen
     >`);

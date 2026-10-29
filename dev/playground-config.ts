@@ -1,7 +1,6 @@
 import type { PlaygroundConfig } from "./playground-types";
 
 export const DEFAULT_CONFIG: PlaygroundConfig = {
-  allowTargetInteraction: true,
   align: "center",
   alignOffset: 0,
   arrow: true,

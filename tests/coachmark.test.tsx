@@ -66,7 +66,6 @@ function CallbackFixture({
       <button ref={target} type="button">
         Callback target
       </button>
-      <button type="button">Outside callback control</button>
       {twoSteps && (
         <button ref={secondTarget} type="button">
           Callback second target
@@ -1376,7 +1375,7 @@ describe("Coachmark", () => {
         await user.keyboard("{Escape}");
       } else {
         fireEvent.click(
-          screen.getByRole("button", { name: "Outside callback control" }),
+          screen.getByRole("button", { name: "Callback target" }),
         );
       }
 

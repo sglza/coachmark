@@ -23,9 +23,6 @@ import { flushSync } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { useRender } from "@base-ui/react/use-render";
 import { mergeProps } from "@base-ui/react/merge-props";
-import { tabbable } from "tabbable";
-import { RemoveScroll } from "react-remove-scroll";
-import { useModalBoundary } from "./use-modal-boundary";
 
 export interface CoachmarkRenderState {
   close: () => void;
@@ -64,17 +61,7 @@ export interface CoachmarkProps {
   stepIndex?: number;
   defaultStepIndex?: number;
   onStepChange?: (index: number) => void;
-  /**
-   * Restrict outside interaction and lock document scrolling. Interactive targets
-   * join the modal boundary when allowTargetInteraction is enabled.
-   * @default true
-   */
   modal?: Popover.Root.Props["modal"];
-  /**
-   * Allow operating the active target and its associated regions.
-   * @default true
-   */
-  allowTargetInteraction?: boolean;
   /**
    * Reset to the first step whenever the tour opens.
    * @default true
@@ -87,13 +74,6 @@ export interface CoachmarkProps {
 export interface CoachmarkStepProps {
   /** Element highlighted and used as the popover anchor. */
   target: RefObject<HTMLElement | null>;
-  /** Override the root's target interaction policy for this step. */
-  allowTargetInteraction?: boolean;
-  /**
-   * Additional interaction regions, such as a target's portaled menu.
-   * These do not change the spotlight or positioning anchor.
-   */
-  interactionRefs?: readonly RefObject<HTMLElement | null>[];
   children: ReactNode;
   /**
    * Space between the target and spotlight cutout, in CSS pixels.
@@ -182,9 +162,6 @@ interface InternalCoachmarkContextValue extends CoachmarkRenderState {
   };
   open: boolean;
   phase: CoachmarkPresentationPhase;
-  triggerElements: Set<HTMLElement>;
-  targetInteraction: boolean;
-  stepPortalRef: RefObject<HTMLDivElement | null>;
 }
 
 type CoachmarkPresentationPhase =
@@ -209,7 +186,6 @@ type SpotlightGeometry = {
 type SpotlightCustomProperties = {
   "--coachmark-cutout-closed"?: string;
   "--coachmark-cutout-open"?: string;
-  "--coachmark-hit-pointer-events"?: "auto" | "none";
 };
 
 type PopupDimensions = {
@@ -852,20 +828,9 @@ function useSpotlightGeometry(
 
 export const CoachmarkTrigger = forwardRef<HTMLElement, CoachmarkTriggerProps>(
   function CoachmarkTrigger(props, forwardedRef) {
-    const triggerElements = useContext(InternalCoachmarkContext)?.triggerElements;
-    const previousElementRef = useRef<HTMLElement | null>(null);
     const mergedRef = useCallback(
-      (element: HTMLElement | null) => {
-        if (previousElementRef.current) {
-          triggerElements?.delete(previousElementRef.current);
-        }
-        previousElementRef.current = element;
-        if (element) {
-          triggerElements?.add(element);
-        }
-        setRef(forwardedRef, element);
-      },
-      [forwardedRef, triggerElements],
+      (element: HTMLElement | null) => setRef(forwardedRef, element),
+      [forwardedRef],
     );
 
     return (
@@ -893,7 +858,6 @@ export const CoachmarkBackdrop = forwardRef<
     open,
     phase,
     transitioning,
-    targetInteraction,
   } = useCoachmarkContext();
   const geometry = useSpotlightGeometry(
     open,
@@ -908,23 +872,6 @@ export const CoachmarkBackdrop = forwardRef<
     },
     [forwardedRef, motionElementRefs.backdrop],
   );
-  const hitAreas: CSSProperties[] = [];
-  if (geometry && targetInteraction) {
-    const left = Math.max(0, Math.min(window.innerWidth, geometry.left));
-    const top = Math.max(0, Math.min(window.innerHeight, geometry.top));
-    const right = Math.max(
-      left, Math.min(window.innerWidth, geometry.left + geometry.width),
-    );
-    const bottom = Math.max(
-      top, Math.min(window.innerHeight, geometry.top + geometry.height),
-    );
-    hitAreas.push(
-      { left: 0, right: 0, top: 0, height: top },
-      { left: 0, top, width: left, height: bottom - top },
-      { right: 0, top, width: window.innerWidth - right, height: bottom - top },
-      { left: 0, right: 0, top: bottom, bottom: 0 },
-    );
-  }
 
   return (
     <Popover.Portal>
@@ -951,38 +898,17 @@ export const CoachmarkBackdrop = forwardRef<
                   ? "var(--coachmark-cutout-path, var(--coachmark-cutout-open))"
                   : undefined),
             visibility: geometry ? undefined : "hidden",
-            // A clipped full-screen hit box can obstruct native wheel scrolling
-            // through its hole. Separate hit areas leave an actual input gap.
-            pointerEvents: hitAreas.length
-              ? "none" : resolvedStyle?.pointerEvents,
-            "--coachmark-hit-pointer-events":
-              resolvedStyle?.pointerEvents === "none" ? "none" : "auto",
           };
 
           return spotlightStyle;
         }}
-      >
-        {hitAreas.map((area, index) => (
-          <div
-            aria-hidden="true"
-            data-slot="coachmark-backdrop-hit-area"
-            key={index}
-            style={{
-              ...area,
-              position: "fixed",
-              pointerEvents:
-                "var(--coachmark-hit-pointer-events, auto)" as CSSProperties["pointerEvents"],
-            }}
-          />
-        ))}
-      </Popover.Backdrop>
+      />
     </Popover.Portal>
   );
 });
 
 export function CoachmarkStep({ children }: CoachmarkStepProps): ReactElement {
-  const { stepPortalRef } = useCoachmarkContext();
-  return <Popover.Portal ref={stepPortalRef}>{children}</Popover.Portal>;
+  return <Popover.Portal>{children}</Popover.Portal>;
 }
 
 export const CoachmarkPositioner = forwardRef<
@@ -1503,23 +1429,14 @@ export function CoachmarkRoot({
   defaultStepIndex = 0,
   onStepChange,
   modal = true,
-  allowTargetInteraction = true,
   resetOnOpen = true,
   scrollIntoView = true,
 }: CoachmarkProps): ReactElement {
   const popoverActionsRef = useRef<Popover.Root.Actions | null>(null);
   const closeActionRef = useRef<"close" | "finish" | undefined>(undefined);
-  const focusOutEventRef = useRef<FocusEvent | null>(null);
-  const outsidePressEventRef = useRef<
-    MouseEvent | PointerEvent | TouchEvent | null
-  >(null);
-  const triggerElements = useRef(new Set<HTMLElement>()).current;
-  const interactionGestureRef = useRef(false);
-  const interactionEvents = useRef(new WeakSet<Event>()).current;
   const backdropMotionRef = useRef<HTMLElement | null>(null);
   const popupMotionRef = useRef<HTMLElement | null>(null);
   const positionerMotionRef = useRef<HTMLElement | null>(null);
-  const stepPortalRef = useRef<HTMLDivElement | null>(null);
   const motionElementRefs = useMemo(
     () => ({
       backdrop: backdropMotionRef,
@@ -1548,13 +1465,6 @@ export function CoachmarkRoot({
   );
   const activeStepElement = steps[safeStepIndex];
   const activeStep = activeStepElement?.props ?? null;
-  const targetInteraction =
-    activeStep?.allowTargetInteraction ?? allowTargetInteraction;
-  const expandedModal = modal !== false && targetInteraction;
-  const interactionStepRef = useRef(activeStep);
-  useLayoutEffect(() => {
-    interactionStepRef.current = activeStep;
-  }, [activeStep]);
   const openAbortRef = useRef<AbortController | null>(null);
   const openStepIndexRef = useRef<number | null>(null);
   const transitionAbortRef = useRef<AbortController | null>(null);
@@ -1571,211 +1481,6 @@ export function CoachmarkRoot({
     phase === "exiting" ||
     phase === "scrolling" ||
     phase === "positioning";
-
-  const getNestedRegions = useCallback(() =>
-    [...(stepPortalRef.current?.children ?? [])].filter(
-      (element): element is HTMLElement => !element.contains(positionerMotionRef.current) &&
-        "focus" in element,
-    ), []);
-  const isInteractionNode = useCallback(
-    (node: EventTarget | null): boolean => {
-      if (!node || !("nodeType" in node)) {
-        return false;
-      }
-      const step = interactionStepRef.current;
-      return [step?.target, ...(step?.interactionRefs ?? [])].some(
-        (ref) => ref?.current?.contains(node as Node),
-      ) || getNestedRegions().some((element) => element.contains(node as Node));
-    },
-    [getNestedRegions],
-  );
-  const getInteractionRegions = useCallback(() => {
-    const step = interactionStepRef.current;
-    const elements = [
-      popupMotionRef.current,
-      step?.target.current,
-      ...(step?.interactionRefs ?? []).map((ref) => ref.current),
-      ...getNestedRegions(),
-    ].filter((element): element is HTMLElement =>
-      element != null && element.isConnected,
-    );
-    return [...new Set(elements)];
-  }, [getNestedRegions]);
-  const requestOutsidePress = useCallback(
-    (event: MouseEvent | PointerEvent | TouchEvent) => {
-      outsidePressEventRef.current = event;
-      try {
-        popoverActionsRef.current?.close();
-      } finally {
-        outsidePressEventRef.current = null;
-      }
-    }, [],
-  );
-  const isInsideTour = useCallback(
-    (node: EventTarget | null): boolean => {
-      if (!node || !("nodeType" in node)) {
-        return false;
-      }
-      return (
-        isInteractionNode(node) ||
-        popupMotionRef.current?.contains(node as Node) === true ||
-        [...triggerElements].some((element) => element.contains(node as Node))
-      );
-    },
-    [isInteractionNode, triggerElements],
-  );
-
-  useLayoutEffect(() => {
-    if (!presentedOpen || !targetInteraction) {
-      return;
-    }
-
-    const ownerDocument =
-      popupMotionRef.current?.ownerDocument ??
-      activeStep?.target.current?.ownerDocument ??
-      document;
-    let completedInteraction = false;
-    let disposed = false;
-    const onPointerDown = (event: PointerEvent) => {
-      completedInteraction = false;
-      interactionGestureRef.current = event.composedPath().some(isInteractionNode);
-    };
-    const onPointerUp = (event: PointerEvent) => {
-      completedInteraction = interactionGestureRef.current;
-      if (completedInteraction) {
-        interactionEvents.add(event);
-      }
-      interactionGestureRef.current = false;
-    };
-    const onPointerCancel = () => {
-      completedInteraction = false;
-      interactionGestureRef.current = false;
-    };
-    const onTouchStart = (event: TouchEvent) => {
-      completedInteraction = false;
-      interactionGestureRef.current = event.composedPath().some(isInteractionNode);
-    };
-    const onTouchEnd = (event: TouchEvent) => {
-      completedInteraction ||= interactionGestureRef.current;
-      if (completedInteraction) {
-        interactionEvents.add(event);
-      }
-      interactionGestureRef.current = false;
-    };
-    const onClick = (event: MouseEvent) => {
-      // Capture ownership before a menu's click handler can unmount its ref.
-      if (
-        event.composedPath().some(isInteractionNode) ||
-        (completedInteraction && event.detail !== 0)
-      ) {
-        interactionEvents.add(event);
-      }
-      completedInteraction = false;
-    };
-    const onFocusOut = (event: FocusEvent) => {
-      if (
-        modal !== false ||
-        !isInteractionNode(event.target) ||
-        !event.relatedTarget
-      ) {
-        return;
-      }
-      queueMicrotask(() => {
-        if (
-          disposed ||
-          interactionGestureRef.current ||
-          isInsideTour(ownerDocument.activeElement)
-        ) {
-          return;
-        }
-        // Reuse Base UI's close pipeline and cancellation utilities, retaining
-        // the native focus event and reason for application dismissal policies.
-        focusOutEventRef.current = event;
-        try {
-          popoverActionsRef.current?.close();
-        } finally {
-          focusOutEventRef.current = null;
-        }
-      });
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        modal !== false ||
-        event.key !== "Tab" ||
-        event.defaultPrevented ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      ) {
-        return;
-      }
-      const popup = popupMotionRef.current;
-      const target = interactionStepRef.current?.target.current;
-      if (!popup || !target) {
-        return;
-      }
-      const activeElement = ownerDocument.activeElement;
-      const targetControls = tabbable(target, { includeContainer: true });
-      if (!event.shiftKey && popup.contains(activeElement)) {
-        const popupControls = tabbable(popup);
-        if (
-          activeElement === (popupControls[popupControls.length - 1] ?? popup) &&
-          targetControls[0]
-        ) {
-          event.preventDefault();
-          targetControls[0].focus();
-        }
-      } else if (event.shiftKey && activeElement === targetControls[0]) {
-        event.preventDefault();
-        // Base UI restores the popup's tab stops when its portal regains focus.
-        popup.focus({ preventScroll: true });
-        const popupControls = tabbable(popup);
-        popupControls[popupControls.length - 1]?.focus({ preventScroll: true });
-      }
-    };
-
-    ownerDocument.addEventListener("pointerdown", onPointerDown, true);
-    ownerDocument.addEventListener("pointerup", onPointerUp, true);
-    ownerDocument.addEventListener("pointercancel", onPointerCancel, true);
-    ownerDocument.addEventListener("touchstart", onTouchStart, true);
-    ownerDocument.addEventListener("touchend", onTouchEnd, true);
-    ownerDocument.addEventListener("touchcancel", onPointerCancel, true);
-    ownerDocument.addEventListener("click", onClick, true);
-    ownerDocument.addEventListener("focusout", onFocusOut);
-    ownerDocument.addEventListener("keydown", onKeyDown);
-    return () => {
-      disposed = true;
-      interactionGestureRef.current = false;
-      ownerDocument.removeEventListener("pointerdown", onPointerDown, true);
-      ownerDocument.removeEventListener("pointerup", onPointerUp, true);
-      ownerDocument.removeEventListener("pointercancel", onPointerCancel, true);
-      ownerDocument.removeEventListener("touchstart", onTouchStart, true);
-      ownerDocument.removeEventListener("touchend", onTouchEnd, true);
-      ownerDocument.removeEventListener("touchcancel", onPointerCancel, true);
-      ownerDocument.removeEventListener("click", onClick, true);
-      ownerDocument.removeEventListener("focusout", onFocusOut);
-      ownerDocument.removeEventListener("keydown", onKeyDown);
-    };
-  }, [
-    activeStep?.target,
-    interactionEvents,
-    isInsideTour,
-    isInteractionNode,
-    modal,
-    presentedOpen,
-    safeStepIndex,
-    targetInteraction,
-  ]);
-
-  const isActiveModalBoundary = useModalBoundary({
-    enabled: presentedOpen && expandedModal,
-    blockOutsidePointer: modal === true,
-    getRegions: getInteractionRegions,
-    triggerElements,
-    interactionGesture: interactionGestureRef,
-    interactionEvents,
-    onOutsidePress: requestOutsidePress,
-  });
 
   const abortOpenPreparation = useCallback(() => {
     openAbortRef.current?.abort();
@@ -1864,12 +1569,6 @@ export function CoachmarkRoot({
       }
 
       const next = Math.max(0, Math.min(nextIndex, stepCount - 1));
-      const popup = popupMotionRef.current;
-      if (popup?.contains(popup.ownerDocument.activeElement)) {
-        // Keep focus on the persistent container before replacing step controls.
-        // Restoring a removed control's focus can otherwise undo target scrolling.
-        popup.focus({ preventScroll: true });
-      }
       setResolvedStepIndex(next);
       onStepChange?.(next);
     },
@@ -2127,9 +1826,6 @@ export function CoachmarkRoot({
       stepCount,
       stepIndex: safeStepIndex,
       transitioning,
-      triggerElements,
-      targetInteraction,
-      stepPortalRef,
     }),
     [
       activeStep,
@@ -2147,8 +1843,6 @@ export function CoachmarkRoot({
       stepCount,
       transitioning,
       transitionTo,
-      triggerElements,
-      targetInteraction,
     ],
   );
   const renderedChildren = useMemo(
@@ -2169,47 +1863,8 @@ export function CoachmarkRoot({
     <InternalCoachmarkContext.Provider value={context}>
       <Popover.Root
         actionsRef={popoverActionsRef}
-        modal={expandedModal ? false : modal}
+        modal={modal}
         onOpenChange={(nextOpen, details) => {
-          if (
-            !nextOpen && expandedModal && !isActiveModalBoundary() &&
-            (details.reason === "outside-press" || details.reason === "escape-key")
-          ) {
-            details.cancel();
-            return;
-          }
-          if (!nextOpen && focusOutEventRef.current) {
-            Object.assign(details, {
-              reason: "focus-out",
-              event: focusOutEventRef.current,
-            });
-          }
-          if (!nextOpen && outsidePressEventRef.current) {
-            Object.assign(details, {
-              reason: "outside-press",
-              event: outsidePressEventRef.current,
-            });
-          }
-          if (!nextOpen && targetInteraction) {
-            const event = details.event;
-            const isTargetPress =
-              details.reason === "outside-press" &&
-              (interactionEvents.has(event) ||
-                event.composedPath().some(isInteractionNode));
-            const focusDestination =
-              event.type === "focusout"
-                ? (event as FocusEvent).relatedTarget
-                : popupMotionRef.current?.ownerDocument.activeElement;
-            const isTargetFocus =
-              details.reason === "focus-out" &&
-              (expandedModal ||
-                interactionGestureRef.current ||
-                isInsideTour(focusDestination ?? null));
-            if (isTargetPress || isTargetFocus) {
-              details.cancel();
-              return;
-            }
-          }
           if (!nextOpen && !resolvedOpenRef.current) {
             details.cancel();
             return;
@@ -2244,23 +1899,6 @@ export function CoachmarkRoot({
         open={presentedOpen && stepCount > 0}
       >
         {renderedChildren}
-        {expandedModal && modal === true ? (
-          <Popover.Portal>
-            <RemoveScroll
-              enabled={presentedOpen}
-              allowPinchZoom
-              noRelative
-              shards={[
-                popupMotionRef,
-                ...(activeStep ? [activeStep.target] : []),
-                ...(activeStep?.interactionRefs ?? []),
-              ]}
-              style={{ display: "contents" }}
-            >
-              <span hidden />
-            </RemoveScroll>
-          </Popover.Portal>
-        ) : null}
       </Popover.Root>
     </InternalCoachmarkContext.Provider>
   );

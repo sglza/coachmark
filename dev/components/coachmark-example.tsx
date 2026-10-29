@@ -64,7 +64,6 @@ export function CoachmarkExample({
         <span className="text-muted-foreground text-xs">Basic tour</span>
         <Coachmark
           key={sessionKey}
-          allowTargetInteraction={config.allowTargetInteraction}
           modal={config.modal}
           onOpenChange={(nextOpen, details) => {
             if (

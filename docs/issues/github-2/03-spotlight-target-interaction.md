@@ -9,7 +9,7 @@ In the reviewed baseline, a highlighted target was not automatically an allowed 
 - Source: [GitHub issue 2](https://github.com/sglza/coachmark/issues/2).
 - Recorded: October 28, 2026.
 - Baseline: commit `3404fb5f0a5e696d1e8933f48d80f221ff222c86`, Coachmark `0.1.1`, Base UI `1.7.0`.
-- Decision status: `modal=true` and `allowTargetInteraction=true` by default. Targets and associated `interactionRefs` join the modal boundary; steps can override target interaction.
+- Decision status: proposed `modal=true` and `allowTargetInteraction=true` defaults; implementation pending. Preserve Base UI modal handling and add only the target exception. No separate scroll-lock API or replacement modal system.
 
 ## Original need and example
 
@@ -33,13 +33,15 @@ The gap prevents learning by doing. It is less clearly a broken existing promise
 
 ## Selected behavior and API
 
-Keep `modal=true` as the default to lock page scrolling and block unrelated interaction. Add `allowTargetInteraction=true` by default, with a per-step override, so the popup, target, and registered portal regions form one allowed boundary. Additional per-step `interactionRefs` may initially be null and do not change the spotlight or anchor.
+Keep `modal=true` as the default and continue forwarding it directly to Base UI. The proposed additive `allowTargetInteraction` prop defaults to true, with a per-step override. Target operations should retain the step; unrelated interaction should continue to follow Base UI's modal and dismissal rules. Applications can cancel `outside-press` and `focus-out` through `onOpenChange`, with cancellation honored after PR #4.
 
-Coachmark manages the expanded modal boundary through pointer containment, focus cycling, assistive-technology exposure, and scroll locking. Setting `allowTargetInteraction=false` preserves Base UI's popup-only modal behavior. Nonmodal mode allows page scrolling and unrelated interaction; trap-focus mode confines focus to the allowed regions while permitting outside pointer interaction and page scrolling.
+The earlier implementation disabled native modality and recreated scroll locking, focus containment, background event blocking, and accessibility isolation. That approach has been removed, along with its additional runtime dependencies. It exceeded the agreed scope.
 
-In modal mode, unrelated presses request dismissal without operating the underlying controls, even without a visible backdrop. In nonmodal mode without a backdrop, unrelated controls remain operable and request dismissal. Applications can cancel `outside-press` and `focus-out` through the existing `onOpenChange` API, whose cancellation handling was fixed in PR #4. Cancellation does not lift modal restrictions.
+### Base UI integration constraint
 
-Modal keyboard focus cycles through the popup, target, and registered regions. Nonmodal focus can continue out through the page normally. Target controls keep their arrow keys. Target-owned menus must consume Escape while open and restore focus to their controls; registered portal refs do not supply third-party keyboard handling or stacking styles. Register the outer portal when a menu owns an interception backdrop.
+In installed Base UI 1.7.0, `Popover.Positioner` anchors to the target but its internal modal backdrop cuts out only the active trigger. `Popover.Popup` also owns its focus manager and does not expose an additional allowed-region API. Canceling dismissal does not change either restriction. The current public Popover API also does not expose this extension.
+
+A working additive prop therefore needs Base UI support for an additional allowed region across pointer interception, focus containment, and accessibility exposure. Until that integration is resolved, the runtime remains identical to main and does not expose a nonfunctional `allowTargetInteraction` prop. The interactive tabs and cancel-outside demo toggle remain available for testing native behavior.
 
 ## Proposed acceptance criteria
 
@@ -51,4 +53,4 @@ Modal keyboard focus cycles through the popup, target, and registered regions. N
 
 ## Verification
 
-Regression coverage exercises target operations, late-mounted portals, controlled state, dismissal cancellation, keyboard focus, pointer and touch gestures, step changes, and explicit modal modes. Browser verification uses a controlled slider and a portaled Base UI select, including backdrop hit testing, nested Escape, touch interaction, and keyboard exit to the page. Direct assistive-technology testing remains separate from DOM accessibility checks. Coordinate future [keyboard navigation](07-keyboard-step-navigation.md) with these controls so their arrow keys do not advance the tour.
+The restored runtime uses the main branch's regression suite. The modal-target prototype and its tests have been removed; their passing results are not evidence for the pending additive implementation. Future coverage must verify actual target access with native modality enabled, including pointer operations, keyboard focus, accessibility exposure, and any target-owned portals.
