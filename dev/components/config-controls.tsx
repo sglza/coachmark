@@ -117,6 +117,11 @@ export function ConfigControls({
           label="Reset on open"
           onChange={(checked) => update("resetOnOpen", checked)}
         />
+        <SwitchControl
+          checked={config.keepOpenOnOutsideInteraction}
+          label="Keep open on outside interaction"
+          onChange={(checked) => update("keepOpenOnOutsideInteraction", checked)}
+        />
       </div>
 
       <div className="mt-5 flex flex-wrap gap-x-6 gap-y-4">
