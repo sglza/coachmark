@@ -1,0 +1,58 @@
+name: Bug report
+description: Report one specific problem with Coachmark.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please report one problem per issue. Multiple examples of the same problem are welcome; unrelated bugs and feature requests belong in separate, linked issues.
+
+        You do not need to know the root cause or provide a fix. Read the [contribution guidelines](https://github.com/sglza/coachmark/blob/main/CONTRIBUTING.md) for examples.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Issue scope
+      options:
+        - label: This report focuses on one problem, and I have searched existing issues for the same problem.
+          required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should happen in this situation?
+    validations:
+      required: true
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: What happens instead? Describe what you observed separately from any suspected cause.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: Share the smallest runnable example, relevant code, or steps that demonstrate this problem. A runnable example is helpful but not required.
+      placeholder: |
+        1. Configure the tour with ...
+        2. Open the tour and ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: coachmark-version
+    attributes:
+      label: Coachmark version
+      description: Which installed version shows the problem?
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include your React version and browser or device when relevant.
+  - type: textarea
+    id: context
+    attributes:
+      label: Related context
+      description: Optional relevant configuration, screenshots, workarounds, or related issues. Keep this context specific to the reported problem.
