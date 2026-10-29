@@ -10,21 +10,30 @@ import { createPortal } from "react-dom";
 import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Coachmark, type CoachmarkProps } from "../src";
+import { Popover } from "@base-ui/react/popover";
 
 afterEach(() => vi.restoreAllMocks());
 
 function InteractionFixture({
   backdrop = false,
-  modal,
+  modal = false,
+  allowTargetInteraction,
+  stepAllowTargetInteraction,
   onOpenChange,
   controlled = false,
   registerMenu = true,
+  onBackdropClick,
+  withNestedPopup = false,
 }: {
   backdrop?: boolean;
-  modal?: CoachmarkProps["modal"];
+  modal?: CoachmarkProps["modal"] | "default";
+  allowTargetInteraction?: boolean;
+  stepAllowTargetInteraction?: boolean;
   onOpenChange?: CoachmarkProps["onOpenChange"];
   controlled?: boolean;
   registerMenu?: boolean;
+  onBackdropClick?: () => void;
+  withNestedPopup?: boolean;
 }) {
   const target = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -82,7 +91,8 @@ function InteractionFixture({
           document.body,
         )}
       <Coachmark.Root
-        modal={modal}
+        modal={modal === "default" ? undefined : modal}
+        allowTargetInteraction={allowTargetInteraction}
         scrollIntoView={false}
         open={controlled ? open : undefined}
         onOpenChange={(nextOpen, details) => {
@@ -91,9 +101,15 @@ function InteractionFixture({
         }}
       >
         <Coachmark.Trigger>Start interaction tour</Coachmark.Trigger>
-        {backdrop && <Coachmark.Backdrop data-testid="backdrop" />}
+        {backdrop && (
+          <Coachmark.Backdrop
+            data-testid="backdrop"
+            onClick={onBackdropClick}
+          />
+        )}
         <Coachmark.Step
           target={target}
+          allowTargetInteraction={stepAllowTargetInteraction}
           interactionRefs={registerMenu ? [menu] : undefined}
         >
           <Coachmark.Positioner>
@@ -101,6 +117,19 @@ function InteractionFixture({
               <Coachmark.Title>Try the controls</Coachmark.Title>
               <Coachmark.Close>Close tour</Coachmark.Close>
               <Coachmark.Next>Next step</Coachmark.Next>
+              {withNestedPopup && (
+                <Popover.Root modal>
+                  <Popover.Trigger>Open nested popup</Popover.Trigger>
+                  <Popover.Portal>
+                    <Popover.Positioner>
+                      <Popover.Popup>
+                        <Popover.Title>Nested control</Popover.Title>
+                        <Popover.Close>Close nested popup</Popover.Close>
+                      </Popover.Popup>
+                    </Popover.Positioner>
+                  </Popover.Portal>
+                </Popover.Root>
+              )}
             </Coachmark.Popup>
           </Coachmark.Positioner>
         </Coachmark.Step>
@@ -129,7 +158,63 @@ async function startTour() {
   return user;
 }
 
+function StackedModalFixture() {
+  const first = useRef<HTMLButtonElement>(null);
+  const second = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={first}>First stacked target</button>
+      <button ref={second}>Second stacked target</button>
+      {[first, second].map((target, index) => (
+        <Coachmark.Root key={index} defaultOpen scrollIntoView={false}>
+          <Coachmark.Step target={target}>
+            <Coachmark.Positioner>
+              <Coachmark.Popup>
+                <Coachmark.Title>Modal {index + 1}</Coachmark.Title>
+                <Coachmark.Close>Close modal {index + 1}</Coachmark.Close>
+              </Coachmark.Popup>
+            </Coachmark.Positioner>
+          </Coachmark.Step>
+        </Coachmark.Root>
+      ))}
+    </>
+  );
+}
+
+function ControlledStepFixture() {
+  const first = useRef<HTMLButtonElement>(null);
+  const second = useRef<HTMLButtonElement>(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  return (
+    <>
+      <button ref={first} onClick={() => setStepIndex(1)}>
+        Advance from target
+      </button>
+      <button ref={second}>Controlled second target</button>
+      <Coachmark.Root defaultOpen stepIndex={stepIndex} scrollIntoView={false}>
+        {[first, second].map((target, index) => (
+          <Coachmark.Step key={index} target={target}>
+            <Coachmark.Positioner>
+              <Coachmark.Popup>
+                <Coachmark.Title>Controlled step {index + 1}</Coachmark.Title>
+                <Coachmark.Close>Close controlled tour</Coachmark.Close>
+              </Coachmark.Popup>
+            </Coachmark.Positioner>
+          </Coachmark.Step>
+        ))}
+      </Coachmark.Root>
+    </>
+  );
+}
+
 describe("nonmodal target interaction", () => {
+  it("removes the target exemption when interaction is disabled", async () => {
+    render(<InteractionFixture allowTargetInteraction={false} />);
+    const user = await startTour();
+    await user.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
   it.each([false, true])(
     "keeps target operations open with backdrop=%s",
     async (backdrop) => {
@@ -184,7 +269,9 @@ describe("nonmodal target interaction", () => {
   it("dismisses when the backdrop is clicked", async () => {
     render(<InteractionFixture backdrop />);
     const user = await startTour();
-    await user.click(screen.getByTestId("backdrop"));
+    await user.click(
+      screen.getByTestId("backdrop").lastElementChild as HTMLElement,
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Outside action 0" }),
@@ -372,7 +459,9 @@ describe("nonmodal target interaction", () => {
   it.each([true, "trap-focus"] as const)(
     "retains popup-only focus management for modal=%s",
     async (modal) => {
-      render(<InteractionFixture modal={modal} />);
+      render(
+        <InteractionFixture modal={modal} allowTargetInteraction={false} />,
+      );
       const user = await startTour();
       const target = screen.getByText("Enable terrain");
       expect(target.closest('[aria-hidden="true"]')).not.toBeNull();
@@ -381,4 +470,229 @@ describe("nonmodal target interaction", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     },
   );
+});
+
+describe("modal target interaction", () => {
+  it("permits a background pinch gesture without dismissing the modal", async () => {
+    const onOpenChange = vi.fn();
+    render(<InteractionFixture modal="default" onOpenChange={onOpenChange} />);
+    await startTour();
+    onOpenChange.mockClear();
+    const outside = screen.getByText("Outside action 0");
+    const touches = [
+      { identifier: 1, clientX: 10, clientY: 10 },
+      { identifier: 2, clientX: 40, clientY: 40 },
+    ];
+    fireEvent.touchStart(outside, { touches });
+    expect(fireEvent.touchMove(outside, { touches })).toBe(true);
+    fireEvent.touchEnd(outside, { touches: [] });
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+  it("recognizes Base UI portals owned by the instructions without extra refs", async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <InteractionFixture
+        modal="default"
+        withNestedPopup
+        onOpenChange={onOpenChange}
+      />,
+    );
+    const user = await startTour();
+    onOpenChange.mockClear();
+    await user.click(screen.getByRole("button", { name: "Open nested popup" }));
+    await screen.findByRole("dialog", { name: "Nested control" });
+    await user.tab();
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Nested control" }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Try the controls" }),
+    ).toBeVisible();
+    expect(document.body).toHaveAttribute("data-scroll-locked");
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+  it("moves focus into the new boundary on a controlled step change", async () => {
+    render(<ControlledStepFixture />);
+    const user = userEvent.setup();
+    await screen.findByRole("dialog", { name: "Controlled step 1" });
+    await user.click(
+      screen.getByRole("button", { name: "Advance from target" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Controlled step 2" }),
+    ).toHaveFocus();
+    expect(document.body).toHaveAttribute("data-scroll-locked");
+  });
+  it("suspends an underlying modal boundary and restores it after closing the top tour", async () => {
+    render(<StackedModalFixture />);
+    const user = userEvent.setup();
+    await screen.findByRole("dialog", { name: "Modal 2" });
+    expect(screen.queryByRole("dialog", { name: "Modal 1" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Close modal 2" }));
+    await screen.findByRole("dialog", { name: "Modal 1" });
+    expect(document.body).toHaveAttribute("data-scroll-locked");
+    await user.click(screen.getByRole("button", { name: "Close modal 1" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body).not.toHaveAttribute("data-scroll-locked");
+  });
+  it("preserves backdrop handlers and cancelable dismissal", async () => {
+    const onBackdropClick = vi.fn();
+    render(
+      <InteractionFixture
+        modal="default"
+        backdrop
+        onBackdropClick={onBackdropClick}
+        onOpenChange={(open, details) => {
+          if (!open && details.reason === "outside-press") details.cancel();
+        }}
+      />,
+    );
+    const user = await startTour();
+    await user.click(
+      screen.getByTestId("backdrop").lastElementChild as HTMLElement,
+    );
+    expect(onBackdropClick).toHaveBeenCalledOnce();
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("keeps focus on the instructions when step controls are replaced", async () => {
+    render(<InteractionFixture modal="default" />);
+    const user = await startTour();
+    await user.click(screen.getByRole("button", { name: "Next step" }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog")).toHaveAttribute("data-phase", "idle"),
+    );
+    expect(screen.getByRole("dialog", { name: "Second step" })).toHaveFocus();
+    expect(document.body).toHaveAttribute("data-scroll-locked");
+  });
+
+  it.each([false, true])(
+    "defaults to interactive targets and blocked background with backdrop=%s",
+    async (backdrop) => {
+      render(<InteractionFixture modal="default" backdrop={backdrop} />);
+      const user = await startTour();
+      await user.click(screen.getByRole("checkbox"));
+      expect(screen.getByRole("checkbox")).toBeChecked();
+      expect(screen.getByRole("dialog")).toBeVisible();
+      expect(document.body).toHaveAttribute("data-scroll-locked");
+      const outside = screen.getByText("Outside action 0");
+      expect(outside.closest('[aria-hidden="true"]')).not.toBeNull();
+      fireEvent.click(outside);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Outside action 0" }),
+      ).toBeVisible();
+      expect(document.body).not.toHaveAttribute("data-scroll-locked");
+    },
+  );
+
+  it("can cancel outside dismissal without activating the background control", async () => {
+    const onOpenChange = vi.fn<NonNullable<CoachmarkProps["onOpenChange"]>>(
+      (open, details) => {
+        if (!open && details.reason === "outside-press") details.cancel();
+      },
+    );
+    render(<InteractionFixture modal="default" onOpenChange={onOpenChange} />);
+    const user = await startTour();
+    onOpenChange.mockClear();
+    fireEvent.click(screen.getByText("Outside action 0"));
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(
+      false,
+      expect.objectContaining({
+        reason: "outside-press",
+        event: expect.any(MouseEvent),
+        isCanceled: true,
+      }),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(document.body).toHaveAttribute("data-scroll-locked");
+    await user.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Outside action 0" }),
+    ).toBeVisible();
+  });
+
+  it("keeps keyboard focus within the popup, target, and associated menu", async () => {
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([
+      new DOMRect(0, 0, 100, 40),
+    ] as unknown as DOMRectList);
+    const onOpenChange = vi.fn();
+    render(<InteractionFixture modal="default" onOpenChange={onOpenChange} />);
+    const user = await startTour();
+    onOpenChange.mockClear();
+    await act(async () =>
+      screen.getByRole("button", { name: "Next step" }).focus(),
+    );
+    await user.tab();
+    expect(screen.getByRole("checkbox")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Next step" })).toHaveFocus();
+    await act(async () =>
+      screen.getByRole("button", { name: "Open menu" }).focus(),
+    );
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Close tour" })).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Open menu" })).toHaveFocus();
+    await act(async () => screen.getByText("Outside action 0").focus());
+    expect(screen.getByRole("button", { name: "Open menu" })).toHaveFocus();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    const menuItem = await screen.findByRole("button", { name: "Satellite" });
+    await act(async () => menuItem.focus());
+    expect(menuItem).toHaveFocus();
+    await user.click(menuItem);
+    expect(screen.getByLabelText("Selection")).toHaveTextContent("Satellite");
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("supports a step enabling target interaction over a restrictive root", async () => {
+    render(
+      <InteractionFixture
+        modal="default"
+        allowTargetInteraction={false}
+        stepAllowTargetInteraction
+      />,
+    );
+    const user = await startTour();
+    await user.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("supports a step opting out of target interaction", async () => {
+    render(
+      <InteractionFixture modal="default" stepAllowTargetInteraction={false} />,
+    );
+    await startTour();
+    expect(
+      screen.getByText("Enable terrain").closest('[aria-hidden="true"]'),
+    ).not.toBeNull();
+  });
+
+  it("expands trap-focus mode without locking page scroll", async () => {
+    render(<InteractionFixture modal="trap-focus" />);
+    const user = await startTour();
+    await user.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(document.body).not.toHaveAttribute("data-scroll-locked");
+  });
+
+  it("restores accessibility and scroll state when unmounted while open", async () => {
+    const { unmount } = render(<InteractionFixture modal="default" />);
+    await startTour();
+    expect(document.body).toHaveAttribute("data-scroll-locked");
+    unmount();
+    expect(document.body).not.toHaveAttribute("data-scroll-locked");
+    expect(document.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
 });

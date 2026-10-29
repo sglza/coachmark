@@ -64,6 +64,7 @@ export function CoachmarkExample({
         <span className="text-muted-foreground text-xs">Basic tour</span>
         <Coachmark
           key={sessionKey}
+          allowTargetInteraction={config.allowTargetInteraction}
           modal={config.modal}
           onOpenChange={(nextOpen, details) => {
             if (
@@ -154,12 +155,11 @@ export function CoachmarkExample({
           </Button>
         </div>
 
-        <Tabs.Root defaultValue="overview">
+        <Tabs.Root defaultValue="overview" ref={tabsRef}>
           <Tabs.List
             activateOnFocus
             aria-label="Workspace views"
             className="border-border mt-6 flex gap-1 border-b"
-            ref={tabsRef}
           >
             {[
               ["overview", "Overview"],

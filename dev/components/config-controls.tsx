@@ -94,6 +94,11 @@ export function ConfigControls({
           value={String(config.modal)}
         />
         <SwitchControl
+          checked={config.allowTargetInteraction}
+          label="Allow target interaction"
+          onChange={(checked) => update("allowTargetInteraction", checked)}
+        />
+        <SwitchControl
           checked={config.arrow}
           label="Arrow"
           onChange={(checked) => update("arrow", checked)}

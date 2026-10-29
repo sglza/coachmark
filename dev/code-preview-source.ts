@@ -38,6 +38,9 @@ export function createTsxSource(
   writer.blank();
   writer.line("return (", 1);
   writer.line("<Coachmark.Root", 2);
+  writer.line(
+    formatValueProp("allowTargetInteraction", config.allowTargetInteraction), 3,
+  );
   writer.line(formatValueProp("modal", config.modal), 3);
   writer.line(formatValueProp("resetOnOpen", config.resetOnOpen), 3);
   if (config.keepOpenOnOutsideInteraction) {

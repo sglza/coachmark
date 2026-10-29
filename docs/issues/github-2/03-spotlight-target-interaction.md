@@ -1,6 +1,6 @@
 # Interaction with spotlight targets
 
-A highlighted target is not automatically an allowed interaction region. Coachmark can explain a slider or select without letting the user operate it while retaining the current step. Supporting that use case requires pointer access, dismissal rules, and focus behavior to work together.
+In the reviewed baseline, a highlighted target was not automatically an allowed interaction region. Coachmark could explain a slider or select without letting the user operate it while retaining the current step. Supporting that use case requires pointer access, dismissal rules, and focus behavior to work together.
 
 ## Status and baseline
 
@@ -9,7 +9,7 @@ A highlighted target is not automatically an allowed interaction region. Coachma
 - Source: [GitHub issue 2](https://github.com/sglza/coachmark/issues/2).
 - Recorded: October 28, 2026.
 - Baseline: commit `3404fb5f0a5e696d1e8933f48d80f221ff222c86`, Coachmark `0.1.1`, Base UI `1.7.0`.
-- Decision status: nonmodal tours allow target interaction; `modal` is the interaction switch, with `false` as the new default and per-step `interactionRefs` for associated portals.
+- Decision status: `modal=true` and `allowTargetInteraction=true` by default. Targets and associated `interactionRefs` join the modal boundary; steps can override target interaction.
 
 ## Original need and example
 
@@ -33,13 +33,13 @@ The gap prevents learning by doing. It is less clearly a broken existing promise
 
 ## Selected behavior and API
 
-Use the existing `modal` prop instead of introducing a separate interaction flag. With `modal=false`, the active target and its descendants can be operated without dismissing the current step. Additional per-step `interactionRefs` register associated content such as portaled menus; refs may initially be null and do not change the spotlight or anchor.
+Keep `modal=true` as the default to lock page scrolling and block unrelated interaction. Add `allowTargetInteraction=true` by default, with a per-step override, so the popup, target, and registered portal regions form one allowed boundary. Additional per-step `interactionRefs` may initially be null and do not change the spotlight or anchor.
 
-Change the default to `modal=false` in a minor release. Explicit `modal=true` retains the restrictive behavior. Trap-focus mode retains Base UI's existing popup-only focus model; use nonmodal mode for keyboard access to the target.
+Coachmark manages the expanded modal boundary through pointer containment, focus cycling, assistive-technology exposure, and scroll locking. Setting `allowTargetInteraction=false` preserves Base UI's popup-only modal behavior. Nonmodal mode allows page scrolling and unrelated interaction; trap-focus mode confines focus to the allowed regions while permitting outside pointer interaction and page scrolling.
 
-With a backdrop, unrelated pointer interactions hit the backdrop and dismiss the tour. Without one, unrelated page controls remain operable and request dismissal. Applications can cancel `outside-press` and `focus-out` through the existing `onOpenChange` API, whose cancellation handling was fixed in PR #4.
+In modal mode, unrelated presses request dismissal without operating the underlying controls, even without a visible backdrop. In nonmodal mode without a backdrop, unrelated controls remain operable and request dismissal. Applications can cancel `outside-press` and `focus-out` through the existing `onOpenChange` API, whose cancellation handling was fixed in PR #4. Cancellation does not lift modal restrictions.
 
-Tab from the last popup control moves to the target's first tab stop, and Shift+Tab returns to the popup. Focus can continue out through the page normally. Target controls keep their arrow keys. Target-owned menus must consume Escape while open and restore focus to their controls; registered portal refs do not supply third-party keyboard handling or stacking styles.
+Modal keyboard focus cycles through the popup, target, and registered regions. Nonmodal focus can continue out through the page normally. Target controls keep their arrow keys. Target-owned menus must consume Escape while open and restore focus to their controls; registered portal refs do not supply third-party keyboard handling or stacking styles. Register the outer portal when a menu owns an interception backdrop.
 
 ## Proposed acceptance criteria
 

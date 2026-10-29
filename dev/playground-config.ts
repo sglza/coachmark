@@ -1,12 +1,13 @@
 import type { PlaygroundConfig } from "./playground-types";
 
 export const DEFAULT_CONFIG: PlaygroundConfig = {
+  allowTargetInteraction: true,
   align: "center",
   alignOffset: 0,
   arrow: true,
   backdrop: true,
   keepOpenOnOutsideInteraction: false,
-  modal: false,
+  modal: true,
   resetOnOpen: true,
   side: "bottom",
   sideOffset: 20,

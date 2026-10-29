@@ -6,6 +6,7 @@ import type {
 export type StylingMode = "css-modules" | "tailwind";
 
 export type PlaygroundConfig = {
+  allowTargetInteraction: boolean;
   align: NonNullable<CoachmarkPositionerProps["align"]>;
   alignOffset: number;
   arrow: boolean;
