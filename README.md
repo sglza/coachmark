@@ -95,22 +95,30 @@ return (
 );
 ```
 
-The application component registers the actual button without adding a wrapper:
+The application component registers a target region. It defaults to a `div`; `render` can use an existing section or control without adding a wrapper:
 
 ```tsx
 <Coachmark.Target
   handle={tour}
   name="workspace-view"
-  render={<button onClick={switchView} />}
+  render={<section aria-label="Workspace controls" />}
 >
-  Switch view
+  <button onClick={switchView}>Switch view</button>
+  <label><input type="checkbox" /> Show completed</label>
+  <div style={{ maxHeight: 200, overflow: "auto" }}>
+    {/* Scrollable workspace content */}
+  </div>
 </Coachmark.Target>
 ```
 
-Instructions can live in their own component. Step content still uses the existing positioner, popup, and navigation parts:
+Instructions can live in their own component. Each step controls interaction with the entire target subtree, including its controls and scrollable sections. Interaction defaults to enabled. The same target can be read-only in one step and interactive in another:
 
 ```tsx
-<Coachmark.Step target="workspace-view" order={0}>
+<Coachmark.Step target="workspace-view" order={0} allowTargetInteraction={false}>
+  {/* Explain the region while its controls and scrolling are blocked */}
+</Coachmark.Step>
+
+<Coachmark.Step target="workspace-view" order={1} allowTargetInteraction>
   <Coachmark.Positioner>
     <Coachmark.Popup>
       <Coachmark.Title>Try another view</Coachmark.Title>
@@ -125,11 +133,14 @@ Instructions can live in their own component. Step content still uses the existi
 - Each handle attaches to one Root. Explicit handles take precedence over surrounding Coachmark or Base UI contexts. Targets inside their own Root can omit the handle.
 - Target names are scoped to the handle; independent tours can reuse names. Duplicate mounted names within one tour are rejected.
 - Steps register across component boundaries. They default to registration order; use explicit `order` values for distributed or conditional definitions so mount order does not determine the sequence.
-- Target presses run the application's handler without opening a closed tour or toggling an open tour. The active named target becomes the native Base UI trigger, while the separate launcher starts the tour and receives focus after dismissal.
+- Target regions retain their own semantics and handlers. They receive no synthetic button role, tab stop, popover ARIA attributes, or activation handlers. A separate Trigger starts the tour and receives focus after dismissal.
+- `Step.allowTargetInteraction` defaults to `true`. An enabled named region participates in Base UI's native modal reference boundary. A disabled step makes only its target subtree inert while open, and restores its previous inert state when the policy changes or the tour closes. Controls remain mounted and retain their state.
+- When a live policy change blocks a focused target, focus moves into the popup. Pointer interaction with a blocked region follows outside-dismissal rules; applications may cancel that dismissal through `onOpenChange`.
+- Interactive hit areas leave a physical gap around the actual target rectangle so wheel scrolling works in Chromium. The styled backdrop's padding does not enlarge the allowed interaction region. The mask also exists without a visible backdrop in modal mode. Base UI still owns modality, document scroll locking, and popup focus management; no wheel forwarding or custom scroll lock is added.
 - A named step waits for its target to mount before presenting. Its position in the sequence is retained.
 - Keep independent Roots as siblings and control which tour opens. No global Provider, automatic tour arbitration, custom scroll lock, or replacement modal system is introduced.
 
-The first slice is intended for button targets. Keyboard traversal between the popup and target is **not resolved**: native modal guards still cycle within the popup, and focus can leave a clicked target through the page's normal Tab order. Non-button target semantics, targets that also trigger another popup, and target-owned portaled menus also need further work before 1.0. This registration work is not evidence that those cases are supported.
+Containers, direct controls, and scrollable target content are supported by the step policy. The interactive modal behavior requires a registered `Target`; plain ref targets retain the legacy behavior during migration. Keyboard operation of a focused native control is preserved, but Tab traversal between the popup and target is **not resolved**: native modal guards still cycle within the popup, and focus can leave an interactive target through the page's normal Tab order. Targets that also trigger another popup and target-owned portaled menus still need verification before 1.0. This work is not evidence that those cases are supported.
 
 See `dev/components/composition/` for a runnable example with targets in separate files, repeated target names across two sibling tours, and parent-controlled mutual exclusion. The original playground example and generated ref-based code remain available for regression comparison.
 
@@ -195,7 +206,7 @@ Opens the tour. Renders a `<button>` by default and accepts all Base UI Popover 
 
 ### Target (1.0 draft)
 
-Registers a named button with the tour and forwards `render`, native props, and refs to Base UI's trigger. It can be inside Root or detached with an explicit handle. The first slice supports button targets; the unresolved focus boundary is described above.
+Registers a named region with the tour. It renders a `div` by default and accepts `render` to use a section, control, or custom component. It forwards application props and refs without injecting button behavior or popover accessibility attributes. It can be inside Root or detached with an explicit handle. Interactivity is controlled by each Step, not by the Target.
 
 | Prop | Type | Description |
 | --- | --- | --- |
@@ -228,6 +239,7 @@ Defines one target and its content. It renders no DOM at the definition site. De
 | --- | --- | --- | --- |
 | `target` | `string \| RefObject<HTMLElement \| null>` | — | Registered target name, or an element ref during migration. |
 | `order` | `number` | `0` | Sorts the sequence; equal values retain registration order. |
+| `allowTargetInteraction` | `boolean` | `true` | Allows operation and scrolling of the target subtree. Set false for a read-only step. |
 | `children` | `ReactNode` | — | The positioner and popup for this step. |
 | `spotlightPadding` | `number` | `8` | Space around the spotlight cutout in CSS pixels. |
 | `spotlightRadius` | `number` | `0` | Corner radius of the spotlight cutout in CSS pixels. |

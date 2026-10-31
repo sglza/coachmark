@@ -29,13 +29,14 @@ export function CompositionDemo() {
       <div className="grid gap-2">
         <h2 className="text-lg font-semibold">1.0 composition preview</h2>
         <p className="text-muted-foreground max-w-3xl text-sm">
-          Named targets in separate components connect to two sibling tour Roots
-          through handles. Both tours use native modal behavior. This example is
-          independent of the controls above.
+          Target regions in separate components connect to two sibling tour
+          Roots through handles. Both tours use native modal behavior. This
+          example is independent of the controls above.
         </p>
         <p className="text-muted-foreground text-xs">
-          Experimental: keyboard traversal between the popup and target still
-          needs to be resolved.
+          The workspace tour starts with a read-only step, then enables the same
+          section. Keyboard traversal between popup and target remains
+          experimental.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

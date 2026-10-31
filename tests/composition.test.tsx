@@ -107,7 +107,8 @@ describe("named tour composition", () => {
     ).toBeInTheDocument();
     const target = screen.getByRole("button", { name: "Application action" });
     expect(target.closest('[aria-hidden="true"]')).toBeNull();
-    expect(target).toHaveAttribute("aria-expanded", "true");
+    expect(target).not.toHaveAttribute("aria-expanded");
+    expect(target).not.toHaveAttribute("aria-haspopup");
     await user.click(target);
     expect(onAction).toHaveBeenCalledTimes(2);
     expect(onOpenChange).toHaveBeenCalledTimes(1);
@@ -119,7 +120,7 @@ describe("named tour composition", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Second action" }),
-    ).toHaveAttribute("aria-expanded", "true");
+    ).not.toHaveAttribute("aria-expanded");
     await user.click(screen.getByRole("button", { name: "Finish tour" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -168,7 +169,7 @@ describe("named tour composition", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Second action" }),
-    ).toHaveAttribute("aria-expanded", "true");
+    ).not.toHaveAttribute("aria-expanded");
   });
 
   it("binds a target to its explicit tour even inside an unrelated Base UI Root", async () => {
@@ -204,7 +205,7 @@ describe("named tour composition", () => {
     await idle();
     expect(
       screen.getByRole("button", { name: "Application action" }),
-    ).toHaveAttribute("aria-expanded", "true");
+    ).not.toHaveAttribute("aria-expanded");
     expect(screen.queryByText("Unrelated popup")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Dismiss tour" }));
     await user.click(
@@ -305,25 +306,36 @@ describe("named tour composition", () => {
   it("preserves the native launcher reference for default-open ref-based tours", async () => {
     function App() {
       const target = useRef<HTMLButtonElement>(null);
-      return <>
-        <button ref={target}>Legacy target</button>
-        <Coachmark.Root defaultOpen scrollIntoView={false}>
-          <Coachmark.Trigger>Default-open launcher</Coachmark.Trigger>
-          <Coachmark.Step target={target}>
-            <Coachmark.Positioner><Coachmark.Popup>
-              <Coachmark.Title>Legacy instructions</Coachmark.Title>
-              <Coachmark.Close>Close legacy tour</Coachmark.Close>
-            </Coachmark.Popup></Coachmark.Positioner>
-          </Coachmark.Step>
-        </Coachmark.Root>
-      </>;
+      return (
+        <>
+          <button ref={target}>Legacy target</button>
+          <Coachmark.Root defaultOpen scrollIntoView={false}>
+            <Coachmark.Trigger>Default-open launcher</Coachmark.Trigger>
+            <Coachmark.Step target={target}>
+              <Coachmark.Positioner>
+                <Coachmark.Popup>
+                  <Coachmark.Title>Legacy instructions</Coachmark.Title>
+                  <Coachmark.Close>Close legacy tour</Coachmark.Close>
+                </Coachmark.Popup>
+              </Coachmark.Positioner>
+            </Coachmark.Step>
+          </Coachmark.Root>
+        </>
+      );
     }
     const user = userEvent.setup();
-    render(<App/>); await idle();
-    expect(screen.getByRole("button", {name:"Default-open launcher"})).toHaveAttribute("aria-expanded", "true");
-    await user.click(screen.getByRole("button", {name:"Close legacy tour"}));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", {name:"Default-open launcher"})).toHaveFocus();
+    render(<App />);
+    await idle();
+    expect(
+      screen.getByRole("button", { name: "Default-open launcher" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("button", { name: "Close legacy tour" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Default-open launcher" }),
+    ).toHaveFocus();
   });
 
   it("rejects duplicate names and sharing a handle across two Roots", () => {

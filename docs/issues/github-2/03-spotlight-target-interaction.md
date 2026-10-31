@@ -9,7 +9,7 @@ In the reviewed baseline, a highlighted target was not automatically an allowed 
 - Source: [GitHub issue 2](https://github.com/sglza/coachmark/issues/2).
 - Recorded: October 28, 2026.
 - Baseline: commit `3404fb5f0a5e696d1e8933f48d80f221ff222c86`, Coachmark `0.1.1`, Base UI `1.7.0`.
-- Decision status: work moved to `feat/v1-tour-composition` for a planned 1.0 API redesign. Explicit target registration retains native `modal=true`. A complete keyboard boundary and generic target semantics remain unresolved.
+- Decision status: work moved to `feat/v1-tour-composition` for a planned 1.0 API redesign. Explicit target registration retains native `modal=true`. Target regions now preserve their semantics and steps control interaction. A complete keyboard boundary remains unresolved.
 
 ## Original need and example
 
@@ -33,7 +33,7 @@ The gap prevents learning by doing. It is less clearly a broken existing promise
 
 ## Selected behavior and API
 
-Keep `modal=true` as the default and continue forwarding it directly to Base UI. The proposed additive `allowTargetInteraction` prop defaults to true, with a per-step override. Target operations should retain the step; unrelated interaction should continue to follow Base UI's modal and dismissal rules. Applications can cancel `outside-press` and `focus-out` through `onOpenChange`, with cancellation honored after PR #4.
+Keep `modal=true` as the default and continue forwarding it directly to Base UI. The per-step `allowTargetInteraction` prop defaults to true. Target registration describes the region, while each step chooses whether its subtree is interactive. Target operations should retain the step; unrelated interaction should continue to follow Base UI's modal and dismissal rules. Applications can cancel `outside-press` and `focus-out` through `onOpenChange`, with cancellation honored after PR #4.
 
 The earlier implementation disabled native modality and recreated scroll locking, focus containment, background event blocking, and accessibility isolation. That approach has been removed, along with its additional runtime dependencies. It exceeded the agreed scope.
 
@@ -43,7 +43,7 @@ In installed Base UI 1.7.0, `Popover.Positioner` anchors to the target but its i
 
 A ref-only additive prop would need Base UI support for an additional allowed region. The broader 1.0 direction instead changes composition: targets register as native triggers, and the active step controls Base UI's `triggerId`. This creates a supported pointer exception without disabling modality. Multiple triggers do not, by themselves, extend the popup's native Tab cycle to the target.
 
-The first implementation on `feat/v1-tour-composition` adds `Coachmark.Target`, `Coachmark.createHandle()`, detached launchers, and registered steps inside separate components. Roots remain per-tour, names are scoped to a handle, and explicit step ordering is available. Ref-based targets remain supported while the migration proceeds. There is no `allowTargetInteraction` or `lockScroll` prop in this slice, no replacement modal machinery, and no new runtime dependency. The package is not bumped or released.
+The first implementation on `feat/v1-tour-composition` adds `Coachmark.Target`, `Coachmark.createHandle()`, detached launchers, and registered steps inside separate components. Roots remain per-tour, names are scoped to a handle, and explicit step ordering is available. Ref-based targets remain supported while the migration proceeds. `Coachmark.Step` now exposes `allowTargetInteraction`, defaulting to true. `Target` renders a neutral region and does not forward native trigger behavior or ARIA attributes onto it. Blocked steps temporarily make their target subtree inert; interactive steps register the region as the native reference. A physical hit mask outside the exact target rectangle avoids Chromium's clipped-backdrop wheel interception, including without a styled backdrop. Native modality, document scroll locking, and popup focus management remain enabled; there is no `lockScroll` prop, replacement scroll-lock implementation, or new runtime dependency. The package is not bumped or released.
 
 ## Proposed acceptance criteria
 
@@ -57,4 +57,6 @@ The first implementation on `feat/v1-tour-composition` adds `Coachmark.Target`, 
 
 The registration implementation retains the 64 baseline tests and adds coverage for detached parts, Strict Mode, sibling tours with repeated names, targets inside unrelated Base UI Roots, explicit step order, content updates, late targets, handle reuse, and invalid registrations. Chromium verification checks actual native-modal hit testing, page wheel locking, target application actions, step changes, dismissal, focus return, and independent sibling tours. The removed custom-modal prototype is not part of this evidence.
 
-Remaining work includes popup-to-target keyboard traversal, focus containment after leaving a target, non-button semantics, nested overlays and portaled controls, touch behavior, and assistive-technology verification. Native modal behavior and scroll handling continue to belong to Base UI.
+Additional regression and browser checks exercise multi-control regions, default-enabled and mixed step policies on the same target, state retention, live focus recovery, preserving application-owned inert state, Backdrop event bubbling, direct custom buttons, nested region scrolling, and the no-visible-backdrop case. The native focus manager's reference-change cleanup is prevented from restoring launcher focus while the tour remains open.
+
+Remaining work includes popup-to-target Tab traversal, focus containment after leaving an interactive target, nested overlays and portaled controls, touch behavior, and assistive-technology verification. Native modal behavior and scroll handling continue to belong to Base UI.

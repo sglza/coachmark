@@ -19,6 +19,7 @@ export class TourStore {
   private snapshot = {
     targets: new Map<string, RegisteredTarget>(),
     launchers: new Set<HTMLElement>(),
+    backdrops: new Set<HTMLElement>(),
     steps: [] as RegisteredStep[],
   };
 
@@ -55,6 +56,20 @@ export class TourStore {
     const launchers = new Set(this.snapshot.launchers);
     launchers.delete(element);
     this.publish({ ...this.snapshot, launchers });
+  }
+
+  registerBackdrop(element: HTMLElement) {
+    if (this.snapshot.backdrops.has(element)) return;
+    const backdrops = new Set(this.snapshot.backdrops);
+    backdrops.add(element);
+    this.publish({ ...this.snapshot, backdrops });
+  }
+
+  unregisterBackdrop(element: HTMLElement) {
+    if (!this.snapshot.backdrops.has(element)) return;
+    const backdrops = new Set(this.snapshot.backdrops);
+    backdrops.delete(element);
+    this.publish({ ...this.snapshot, backdrops });
   }
 
   registerTarget(name: string, target: RegisteredTarget) {
