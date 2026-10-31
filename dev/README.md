@@ -2,15 +2,15 @@
 
 This app is the library's visual test environment. It imports Coachmark from `../dist/index.js`, so the UI always exercises the same build that a package consumer receives. The controls use targeted components copied from the Coss UI registry; they and Tailwind are development-only and are not included in the published package.
 
-The default uses Base UI's native modal behavior: page scrolling and outside pointer interaction are restricted. The workspace tabs are interactive outside a tour. The new per-step `allowTargetInteraction` API is demonstrated separately in the composition preview.
+The main workspace example uses named targets for its tabbed section, activation card, and invite button. All playground settings apply to that single tour.
 
-To try a persistent tour while exploring the page, choose Non-modal, turn off Backdrop, and enable Keep open on outside interaction before starting the tour. Clicking other controls or moving keyboard focus outside then keeps the current step open. In modal mode, the toggle prevents outside dismissal while keeping background controls blocked. Escape, Skip, and Finish still close the tour. The toggle demonstrates canceling `outside-press` and `focus-out` requests through `onOpenChange`; the generated code includes that handler when enabled.
+Each popup has its own **Allow target interaction** switch, enabled by default. Change it while the tour is open, then move Back or Next to verify that the three values are independent and retained. The tabs switch panels, the Activity panel has a scrollable list, the activation card switches between weekly/monthly metrics, and Invite teammate increments a simulated invitation count. Controls and scroll position retain their state when interaction is blocked and enabled again.
 
-## Composition preview
+The generated code includes all three named targets and step definitions, with the chosen `allowTargetInteraction` values. `playground-steps.ts` supplies shared target names, titles, descriptions, and popup sizes to the live example and source generator. Demo-only switches are omitted from the generated consumer example.
 
-The separate **1.0 composition preview** demonstrates named target regions in `workspace-controls.tsx`, `team-actions.tsx`, and `preference-control.tsx`. Instructions live in `tour-instructions.tsx`; `composition-demo.tsx` owns two stable handles and sibling Roots. Parent-controlled `open` permits one tour at a time. Both Roots use native `modal=true`, independently of the original playground controls. The workspace tour starts with `allowTargetInteraction={false}` on a section containing a button, checkbox, and scrollable list. Next enables the same section; Back disables it again without resetting control or scroll state. The final workspace step uses a button in another component. The independent preferences tour deliberately reuses a target name and preserves the button's own ARIA state.
+To try a persistent tour while exploring the page, choose Non-modal, turn off Backdrop, and enable Keep open on outside interaction before starting. Outside presses and focus changes then keep the current step open. Escape, Skip, and Finish still close it. In modal mode, the toggle prevents outside dismissal while keeping unrelated controls blocked. The generated code includes the cancellation handler when enabled.
 
-This is an initial implementation, not a release-ready modal interaction boundary. Popup-to-target Tab traversal and target-owned popups remain open work. Native control keyboard actions, such as Space on a focused checkbox, remain available during interactive steps. No additional runtime dependencies have been added.
+Popup-to-target Tab traversal and target-owned popups remain open library work; consolidating the demo does not change those limitations.
 
 ## Extending the playground
 

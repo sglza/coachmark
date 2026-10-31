@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useState } from "react";
 import { Tabs } from "@base-ui/react/tabs";
 import {
   Coachmark,
@@ -20,21 +20,25 @@ import {
 } from "coachmark";
 
 import { Button } from "@/dev/components/ui/button";
+import { Switch } from "@/dev/components/ui/switch";
+import { PLAYGROUND_STEPS, type PlaygroundStepId } from "../playground-steps";
 import { getCoachmarkClassNames } from "../coachmark-styles";
 import type { PlaygroundConfig, StylingMode } from "../playground-types";
 
 export function CoachmarkExample({
   config,
+  onStepInteractionChange,
   sessionKey,
   stylingMode,
 }: {
   config: PlaygroundConfig;
+  onStepInteractionChange: (step: PlaygroundStepId, allowed: boolean) => void;
   sessionKey: number;
   stylingMode: StylingMode;
 }) {
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const metricRef = useRef<HTMLElement>(null);
-  const inviteRef = useRef<HTMLButtonElement>(null);
+  const [tour] = useState(Coachmark.createHandle);
+  const [weekly, setWeekly] = useState(false);
+  const [invitations, setInvitations] = useState(6);
   const viewportEnabled =
     config.viewport &&
     (config.transition === "move" || config.transition === "viewport-only");
@@ -64,6 +68,7 @@ export function CoachmarkExample({
         <span className="text-muted-foreground text-xs">Basic tour</span>
         <Coachmark
           key={sessionKey}
+          handle={tour}
           modal={config.modal}
           onOpenChange={(nextOpen, details) => {
             if (
@@ -79,67 +84,36 @@ export function CoachmarkExample({
         >
           <CoachmarkTrigger render={<Button size="sm">Start tour</Button>} />
           {config.backdrop ? (
-            <CoachmarkBackdrop
-              className={classNames.medium.backdrop}
-            />
+            <CoachmarkBackdrop className={classNames.medium.backdrop} />
           ) : null}
-          <CoachmarkStep
-            {...spotlightProps}
-            target={tabsRef}
-          >
-            <CoachmarkPositioner
-              {...positionerProps}
-              className={classNames.compact.positioner}
+          {PLAYGROUND_STEPS.map((step, index) => (
+            <CoachmarkStep
+              {...spotlightProps}
+              key={step.id}
+              target={step.target}
+              order={index}
+              allowTargetInteraction={config.stepInteraction[step.id]}
             >
-              <CoachmarkPopup className={classNames.compact.popup}>
-                <StepContent
-                  arrow={config.arrow}
-                  classNames={classNames.compact}
-                  description="Choose a view to switch the content below. Arrow keys move between tabs."
-                  title="Switch between views"
-                  viewport={viewportEnabled}
-                />
-              </CoachmarkPopup>
-            </CoachmarkPositioner>
-          </CoachmarkStep>
-          <CoachmarkStep
-            {...spotlightProps}
-            target={metricRef}
-          >
-            <CoachmarkPositioner
-              {...positionerProps}
-              className={classNames.medium.positioner}
-            >
-              <CoachmarkPopup className={classNames.medium.popup}>
-                <StepContent
-                  arrow={config.arrow}
-                  classNames={classNames.medium}
-                  description="Activation shows the share of invited teammates who completed setup, so you can spot where onboarding slows down."
-                  title="Track activation"
-                  viewport={viewportEnabled}
-                />
-              </CoachmarkPopup>
-            </CoachmarkPositioner>
-          </CoachmarkStep>
-          <CoachmarkStep
-            {...spotlightProps}
-            target={inviteRef}
-          >
-            <CoachmarkPositioner
-              {...positionerProps}
-              className={classNames.large.positioner}
-            >
-              <CoachmarkPopup className={classNames.large.popup}>
-                <StepContent
-                  arrow={config.arrow}
-                  classNames={classNames.large}
-                  description="Invite teammates when you are ready to collaborate. They will receive a secure link, join this workspace with the Member role, and appear in your activation metrics after setup."
-                  title="Invite your team"
-                  viewport={viewportEnabled}
-                />
-              </CoachmarkPopup>
-            </CoachmarkPositioner>
-          </CoachmarkStep>
+              <CoachmarkPositioner
+                {...positionerProps}
+                className={classNames[step.size].positioner}
+              >
+                <CoachmarkPopup className={classNames[step.size].popup}>
+                  <StepContent
+                    arrow={config.arrow}
+                    classNames={classNames[step.size]}
+                    description={step.description}
+                    title={step.title}
+                    viewport={viewportEnabled}
+                    allowTargetInteraction={config.stepInteraction[step.id]}
+                    onInteractionChange={(allowed) =>
+                      onStepInteractionChange(step.id, allowed)
+                    }
+                  />
+                </CoachmarkPopup>
+              </CoachmarkPositioner>
+            </CoachmarkStep>
+          ))}
         </Coachmark>
       </div>
 
@@ -149,12 +123,26 @@ export function CoachmarkExample({
             <p className="text-muted-foreground text-xs">Workspace</p>
             <h2 className="mt-1 text-lg font-semibold">Overview</h2>
           </div>
-          <Button ref={inviteRef} size="sm" variant="outline">
+          <Coachmark.Target
+            handle={tour}
+            name="workspace-invite"
+            render={
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setInvitations((current) => current + 1)}
+              />
+            }
+          >
             Invite teammate
-          </Button>
+          </Coachmark.Target>
         </div>
 
-        <Tabs.Root defaultValue="overview" ref={tabsRef}>
+        <Coachmark.Target
+          handle={tour}
+          name="workspace-views"
+          render={<Tabs.Root defaultValue="overview" />}
+        >
           <Tabs.List
             activateOnFocus
             aria-label="Workspace views"
@@ -183,21 +171,37 @@ export function CoachmarkExample({
                 4 joined this week
               </small>
             </article>
-            <article
+            <Coachmark.Target
+              handle={tour}
+              name="workspace-activation"
+              render={<article />}
               className="border-border rounded-lg border p-4"
-              ref={metricRef}
             >
               <span className="text-muted-foreground text-[11px]">
                 Activation
               </span>
-              <strong className="mt-2 block text-xl">68%</strong>
+              <strong className="mt-2 block text-xl" aria-live="polite">
+                {weekly ? "74%" : "68%"}
+              </strong>
               <small className="text-success-foreground text-[10px]">
-                Up 6% this month
+                {weekly ? "Up 4% this week" : "Up 6% this month"}
               </small>
-            </article>
+              <Button
+                size="xs"
+                variant="ghost"
+                className="mt-2"
+                aria-label="Toggle activation period"
+                aria-pressed={weekly}
+                onClick={() => setWeekly((current) => !current)}
+              >
+                {weekly ? "This week" : "This month"}
+              </Button>
+            </Coachmark.Target>
             <article className="border-border rounded-lg border p-4">
               <span className="text-muted-foreground text-[11px]">Pending</span>
-              <strong className="mt-2 block text-xl">6</strong>
+              <strong className="mt-2 block text-xl" aria-live="polite">
+                {invitations}
+              </strong>
               <small className="text-muted-foreground text-[10px]">
                 Invitations sent
               </small>
@@ -221,7 +225,11 @@ export function CoachmarkExample({
             className="border-border mt-3 min-h-32 rounded-lg border"
             value="activity"
           >
-            <ul className="divide-border divide-y text-xs">
+            <ul
+              aria-label="Workspace activity"
+              tabIndex={0}
+              className="divide-border max-h-36 overflow-auto divide-y text-xs"
+            >
               <li className="grid gap-1 px-4 py-3">
                 <span>Maya invited Jon to the workspace.</span>
                 <span className="text-muted-foreground">Just now</span>
@@ -230,6 +238,12 @@ export function CoachmarkExample({
                 <span>Jon completed onboarding.</span>
                 <span className="text-muted-foreground">2 hours ago</span>
               </li>
+              {Array.from({ length: 6 }, (_, index) => (
+                <li key={index} className="grid gap-1 px-4 py-3">
+                  <span>Workspace setup task {index + 1} completed.</span>
+                  <span className="text-muted-foreground">Earlier today</span>
+                </li>
+              ))}
             </ul>
           </Tabs.Panel>
           <Tabs.Panel
@@ -247,7 +261,7 @@ export function CoachmarkExample({
               </div>
             </dl>
           </Tabs.Panel>
-        </Tabs.Root>
+        </Coachmark.Target>
       </div>
     </section>
   );
@@ -259,23 +273,30 @@ function StepContent({
   description,
   title,
   viewport,
+  allowTargetInteraction,
+  onInteractionChange,
 }: {
   arrow: boolean;
   classNames: ReturnType<typeof getCoachmarkClassNames>;
   description: string;
   title: string;
   viewport: boolean;
+  allowTargetInteraction: boolean;
+  onInteractionChange: (allowed: boolean) => void;
 }) {
   const content = (
     <div className={classNames.content}>
       <CoachmarkStepper className={classNames.stepper}>
-        {({ stepCount, stepIndex }) =>
-          `Step ${stepIndex + 1} of ${stepCount}`
-        }
+        {({ stepCount, stepIndex }) => `Step ${stepIndex + 1} of ${stepCount}`}
       </CoachmarkStepper>
-      <CoachmarkTitle className={classNames.title}>
-        {title}
-      </CoachmarkTitle>
+      <CoachmarkTitle className={classNames.title}>{title}</CoachmarkTitle>
+      <label className="flex items-center gap-2 text-xs">
+        <Switch
+          checked={allowTargetInteraction}
+          onCheckedChange={onInteractionChange}
+        />
+        <span>Allow target interaction</span>
+      </label>
       <CoachmarkDescription className={classNames.description}>
         {description}
       </CoachmarkDescription>
@@ -284,15 +305,11 @@ function StepContent({
           Skip
         </CoachmarkClose>
         <div className={classNames.navigation}>
-          <CoachmarkPrevious
-            render={<Button size="xs" variant="outline" />}
-          >
+          <CoachmarkPrevious render={<Button size="xs" variant="outline" />}>
             Back
           </CoachmarkPrevious>
           <CoachmarkNext render={<Button size="xs" />}>
-            {({ isLastStep }) =>
-              isLastStep ? "Finish" : "Next"
-            }
+            {({ isLastStep }) => (isLastStep ? "Finish" : "Next")}
           </CoachmarkNext>
         </div>
       </div>
@@ -301,9 +318,7 @@ function StepContent({
 
   return (
     <>
-      {arrow ? (
-        <CoachmarkArrow className={classNames.arrow} />
-      ) : null}
+      {arrow ? <CoachmarkArrow className={classNames.arrow} /> : null}
       {viewport ? (
         <CoachmarkViewport className={classNames.viewport}>
           {content}

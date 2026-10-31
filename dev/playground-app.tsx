@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { CoachmarkExample } from "./components/coachmark-example";
-import { CompositionDemo } from "./components/composition/composition-demo";
 import { CodePreview } from "./components/code-preview";
 import { ConfigControls } from "./components/config-controls";
 import { DEFAULT_CONFIG } from "./playground-config";
@@ -36,12 +35,16 @@ export function PlaygroundApp() {
       <div className="flex min-h-[560px] items-center py-16">
         <CoachmarkExample
           config={config}
+          onStepInteractionChange={(step, allowed) =>
+            setConfig((current) => ({
+              ...current,
+              stepInteraction: { ...current.stepInteraction, [step]: allowed },
+            }))
+          }
           sessionKey={sessionKey}
           stylingMode={stylingMode}
         />
       </div>
-
-      <CompositionDemo />
 
       <CodePreview
         config={config}

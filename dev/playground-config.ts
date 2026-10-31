@@ -8,6 +8,7 @@ export const DEFAULT_CONFIG: PlaygroundConfig = {
   keepOpenOnOutsideInteraction: false,
   modal: true,
   resetOnOpen: true,
+  stepInteraction: { views: true, activation: true, invite: true },
   side: "bottom",
   sideOffset: 20,
   spotlightPadding: 8,

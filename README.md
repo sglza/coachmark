@@ -142,7 +142,7 @@ Instructions can live in their own component. Each step controls interaction wit
 
 Containers, direct controls, and scrollable target content are supported by the step policy. The interactive modal behavior requires a registered `Target`; plain ref targets retain the legacy behavior during migration. Keyboard operation of a focused native control is preserved, but Tab traversal between the popup and target is **not resolved**: native modal guards still cycle within the popup, and focus can leave an interactive target through the page's normal Tab order. Targets that also trigger another popup and target-owned portaled menus still need verification before 1.0. This work is not evidence that those cases are supported.
 
-See `dev/components/composition/` for a runnable example with targets in separate files, repeated target names across two sibling tours, and parent-controlled mutual exclusion. The original playground example and generated ref-based code remain available for regression comparison.
+See `dev/components/coachmark-example.tsx` for the single workspace demo. Its three popups each expose an independent interaction toggle, and the generated code uses the same named targets and selected step policies. Sibling-tour isolation remains covered by the composition regression tests.
 
 ## API
 
