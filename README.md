@@ -74,6 +74,65 @@ export function ToolbarTour() {
 
 Coachmark ships no stylesheet. Style each part with `className`, `style`, the Base UI `render` prop, or its stable `data-slot` attribute.
 
+## 1.0 composition work in progress
+
+This branch starts the 1.0 composition redesign. The current package version remains `0.1.1`; the new interaction model is not release-ready. The existing ref-based examples above remain supported during migration.
+
+A tour can now connect controls in separate components to a sibling Root through a stable handle:
+
+```tsx
+const [tour] = useState(Coachmark.createHandle);
+
+return (
+  <>
+    <WorkspaceControls tour={tour} />
+    <Coachmark.Trigger handle={tour}>Start tour</Coachmark.Trigger>
+
+    <Coachmark.Root handle={tour} modal>
+      <WorkspaceInstructions />
+    </Coachmark.Root>
+  </>
+);
+```
+
+The application component registers the actual button without adding a wrapper:
+
+```tsx
+<Coachmark.Target
+  handle={tour}
+  name="workspace-view"
+  render={<button onClick={switchView} />}
+>
+  Switch view
+</Coachmark.Target>
+```
+
+Instructions can live in their own component. Step content still uses the existing positioner, popup, and navigation parts:
+
+```tsx
+<Coachmark.Step target="workspace-view" order={0}>
+  <Coachmark.Positioner>
+    <Coachmark.Popup>
+      <Coachmark.Title>Try another view</Coachmark.Title>
+      <Coachmark.Close>Close</Coachmark.Close>
+      <Coachmark.Next>Finish</Coachmark.Next>
+    </Coachmark.Popup>
+  </Coachmark.Positioner>
+</Coachmark.Step>
+```
+
+- Create a handle once per mounted tour, using a lazy `useState` initializer. Handles connect parts; use a Trigger or controlled `open` to start a tour.
+- Each handle attaches to one Root. Explicit handles take precedence over surrounding Coachmark or Base UI contexts. Targets inside their own Root can omit the handle.
+- Target names are scoped to the handle; independent tours can reuse names. Duplicate mounted names within one tour are rejected.
+- Steps register across component boundaries. They default to registration order; use explicit `order` values for distributed or conditional definitions so mount order does not determine the sequence.
+- Target presses run the application's handler without opening a closed tour or toggling an open tour. The active named target becomes the native Base UI trigger, while the separate launcher starts the tour and receives focus after dismissal.
+- A named step waits for its target to mount before presenting. Its position in the sequence is retained.
+- Keep independent Roots as siblings and control which tour opens. No global Provider, automatic tour arbitration, custom scroll lock, or replacement modal system is introduced.
+
+The first slice is intended for button targets. Keyboard traversal between the popup and target is **not resolved**: native modal guards still cycle within the popup, and focus can leave a clicked target through the page's normal Tab order. Non-button target semantics, targets that also trigger another popup, and target-owned portaled menus also need further work before 1.0. This registration work is not evidence that those cases are supported.
+
+See `dev/components/composition/` for a runnable example with targets in separate files, repeated target names across two sibling tours, and parent-controlled mutual exclusion. The original playground example and generated ref-based code remain available for regression comparison.
+
 ## API
 
 The compound parts are available on `Coachmark` and as individual named exports such as `CoachmarkRoot`, `CoachmarkStep`, and `CoachmarkPopup`.
@@ -86,7 +145,8 @@ Controls the tour's open state and active step. It does not render a DOM element
 
 | Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `children` | `ReactNode` | — | A trigger, optional backdrop, and one or more steps. |
+| `children` | `ReactNode` | — | Application content, targets, launchers, backdrop, and step definitions. |
+| `handle` | `CoachmarkHandle` | Internal | Connects detached targets and launchers to this tour. |
 | `open` | `boolean` | — | Controls whether the tour is open. |
 | `defaultOpen` | `boolean` | `false` | Sets the initial open state when uncontrolled. |
 | `onOpenChange` | `(open, details) => void` | — | Called when an interaction or hook action requests an open-state change. |
@@ -123,6 +183,7 @@ Opens the tour. Renders a `<button>` by default and accepts all Base UI Popover 
 
 | Prop or attribute | Type or value | Description |
 | --- | --- | --- |
+| `handle` | `CoachmarkHandle` | Explicitly associates a detached launcher with a tour. |
 | `nativeButton` | `boolean` | Whether a custom rendered element is a native button. |
 | `disabled` | `boolean` | Disables the trigger. |
 | `openOnHover` | `boolean` | Opens the tour when the trigger is hovered. |
@@ -131,6 +192,16 @@ Opens the tour. Renders a `<button>` by default and accepts all Base UI Popover 
 | `data-slot` | `"coachmark-trigger"` | Stable part selector. |
 | `data-popup-open` | Present when open | Added by Base UI. |
 | `data-pressed` | Present when pressed | Added by Base UI for press-opened popovers. |
+
+### Target (1.0 draft)
+
+Registers a named button with the tour and forwards `render`, native props, and refs to Base UI's trigger. It can be inside Root or detached with an explicit handle. The first slice supports button targets; the unresolved focus boundary is described above.
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | Required target name, unique among mounted targets in this tour. |
+| `handle` | `CoachmarkHandle` | Connects a target outside Root, or overrides the surrounding tour context. |
+| `render` | `ReactElement \| function` | Uses an existing control without adding a DOM wrapper. |
 
 ### Backdrop
 
@@ -151,11 +222,12 @@ The backdrop also exposes `--coachmark-cutout-open` and `--coachmark-cutout-clos
 
 ### Step
 
-Defines one target and its content. It does not render a DOM element. Steps must be direct children of the root; fragments are supported, and their order defines the tour order.
+Defines one target and its content. It renders no DOM at the definition site. Definitions may live inside separate components under Root; only the active step content renders, through a shared portal that preserves popup and viewport continuity. Use `order` to define a stable sequence across independently mounted components.
 
 | Prop | Type | Default | Description |
 | --- | --- | --- | --- |
-| `target` | `RefObject<HTMLElement \| null>` | — | Element highlighted and used as the positioner anchor. |
+| `target` | `string \| RefObject<HTMLElement \| null>` | — | Registered target name, or an element ref during migration. |
+| `order` | `number` | `0` | Sorts the sequence; equal values retain registration order. |
 | `children` | `ReactNode` | — | The positioner and popup for this step. |
 | `spotlightPadding` | `number` | `8` | Space around the spotlight cutout in CSS pixels. |
 | `spotlightRadius` | `number` | `0` | Corner radius of the spotlight cutout in CSS pixels. |

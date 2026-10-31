@@ -6,15 +6,13 @@ import type {
   RefObject,
 } from "react";
 import {
-  Children,
-  cloneElement,
   createContext,
   forwardRef,
-  Fragment,
-  isValidElement,
   useCallback,
   useContext,
   useLayoutEffect,
+  useId,
+  useSyncExternalStore,
   useMemo,
   useRef,
   useState,
@@ -23,6 +21,12 @@ import { flushSync } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { useRender } from "@base-ui/react/use-render";
 import { mergeProps } from "@base-ui/react/merge-props";
+import {
+  createCoachmarkHandle,
+  getTourStore,
+  type CoachmarkHandle,
+  type TourStore,
+} from "./tour-store";
 
 export interface CoachmarkRenderState {
   close: () => void;
@@ -50,8 +54,10 @@ export type CoachmarkOpenChangeEventDetails = Popover.Root.ChangeEventDetails & 
 };
 
 export interface CoachmarkProps {
-  /** A trigger, optional backdrop, and one or more CoachmarkStep children. */
+  /** Application content, targets, launchers, and registered step definitions. */
   children: ReactNode;
+  /** Connect targets and launchers rendered outside this Root. */
+  handle?: CoachmarkHandle;
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (
@@ -72,8 +78,10 @@ export interface CoachmarkProps {
 }
 
 export interface CoachmarkStepProps {
-  /** Element highlighted and used as the popover anchor. */
-  target: RefObject<HTMLElement | null>;
+  /** Registered target name. Element refs remain supported during the 1.0 migration. */
+  target: string | RefObject<HTMLElement | null>;
+  /** Explicit sequence for steps distributed across independently mounted components. */
+  order?: number;
   children: ReactNode;
   /**
    * Space between the target and spotlight cutout, in CSS pixels.
@@ -92,7 +100,32 @@ export interface CoachmarkStepProps {
 export interface CoachmarkBackdropProps
   extends Omit<Popover.Backdrop.Props, "children"> {}
 
-export type CoachmarkTriggerProps = Popover.Trigger.Props;
+export interface CoachmarkTriggerProps
+  extends Omit<Popover.Trigger.Props, "handle"> {
+  handle?: CoachmarkHandle;
+}
+
+export interface CoachmarkTargetProps extends CoachmarkTriggerProps {
+  /** Name scoped to this tour; not a CSS selector or a global DOM id. */
+  name: string;
+}
+
+type ResolvedCoachmarkStepProps = Omit<CoachmarkStepProps, "target"> & {
+  target: RefObject<HTMLElement | null>;
+};
+
+const TourStoreContext = createContext<TourStore | null>(null);
+
+function useTourStore(handle?: CoachmarkHandle): TourStore {
+  const context = useContext(TourStoreContext);
+  const store = handle ? getTourStore(handle) : context;
+  if (!store) {
+    throw new Error(
+      "Coachmark: use this part inside a Root or provide a tour handle.",
+    );
+  }
+  return store;
+}
 export type CoachmarkArrowProps = Popover.Arrow.Props;
 export type CoachmarkPositionerProps = Omit<
   Popover.Positioner.Props,
@@ -152,7 +185,8 @@ export interface CoachmarkNextProps
 }
 
 interface InternalCoachmarkContextValue extends CoachmarkRenderState {
-  activeStep: CoachmarkStepProps | null;
+  activeStep: ResolvedCoachmarkStepProps | null;
+  launcherRef: RefObject<HTMLElement | null>;
   activationDirection: string | undefined;
   concealed: boolean;
   motionElementRefs: {
@@ -203,9 +237,8 @@ type PopupSizeCustomProperties = {
   "--popup-width"?: string;
 };
 
-const InternalCoachmarkContext = createContext<InternalCoachmarkContextValue | null>(
-  null,
-);
+const InternalCoachmarkContext =
+  createContext<InternalCoachmarkContextValue | null>(null);
 
 const defaultScrollIntoViewOptions: ScrollIntoViewOptions = {
   behavior: "smooth",
@@ -239,10 +272,8 @@ function getPartState(context: CoachmarkRenderState): CoachmarkPartState {
 }
 
 const coachmarkPartStateAttributesMapping = {
-  isFirstStep: (value: boolean) =>
-    value ? { "data-first-step": "" } : null,
-  isLastStep: (value: boolean) =>
-    value ? { "data-last-step": "" } : null,
+  isFirstStep: (value: boolean) => (value ? { "data-first-step": "" } : null),
+  isLastStep: (value: boolean) => (value ? { "data-last-step": "" } : null),
   motionState: (value: CoachmarkMotionState) => ({
     "data-motion-state": value,
   }),
@@ -400,14 +431,8 @@ function setPositionerDimensions(
   positioner: HTMLElement,
   dimensions: PopupDimensions,
 ): void {
-  positioner.style.setProperty(
-    "--positioner-height",
-    `${dimensions.height}px`,
-  );
-  positioner.style.setProperty(
-    "--positioner-width",
-    `${dimensions.width}px`,
-  );
+  positioner.style.setProperty("--positioner-height", `${dimensions.height}px`);
+  positioner.style.setProperty("--positioner-width", `${dimensions.width}px`);
 }
 
 function setRef<T>(ref: Ref<T> | undefined, value: T | null): void {
@@ -584,7 +609,7 @@ function waitForScrollEnd(
 }
 
 function startTargetScroll(
-  step: CoachmarkStepProps | null,
+  step: ResolvedCoachmarkStepProps | null,
   rootValue: boolean | ScrollIntoViewOptions,
   signal: AbortSignal,
 ): Promise<void> | null {
@@ -736,13 +761,7 @@ function getSpotlightGeometry(
   const height = bottom - top;
   const cutoutRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
   const outerPath = `M 0 0 H ${window.innerWidth} V ${window.innerHeight} H 0 Z`;
-  const innerPath = getRoundedRectPath(
-    left,
-    top,
-    right,
-    bottom,
-    cutoutRadius,
-  );
+  const innerPath = getRoundedRectPath(left, top, right, bottom, cutoutRadius);
   const centerX = left + width / 2;
   const centerY = top + height / 2;
   const closedInnerPath = getRoundedRectPath(
@@ -827,16 +846,60 @@ function useSpotlightGeometry(
 }
 
 export const CoachmarkTrigger = forwardRef<HTMLElement, CoachmarkTriggerProps>(
-  function CoachmarkTrigger(props, forwardedRef) {
+  function CoachmarkTrigger({ handle, ...props }, forwardedRef) {
+    const store = useTourStore(handle);
+    const previousElement = useRef<HTMLElement | null>(null);
     const mergedRef = useCallback(
-      (element: HTMLElement | null) => setRef(forwardedRef, element),
-      [forwardedRef],
+      (element: HTMLElement | null) => {
+        if (previousElement.current) store.unregisterLauncher(previousElement.current);
+        previousElement.current = element;
+        setRef(forwardedRef, element);
+        if (element) store.registerLauncher(element);
+      },
+      [forwardedRef, store],
     );
 
     return (
       <Popover.Trigger
         {...props}
         data-slot="coachmark-trigger"
+        handle={store.popoverHandle}
+        ref={mergedRef}
+      />
+    );
+  },
+);
+
+/** Registers an existing control as a tour target and a native Base UI trigger. */
+export const CoachmarkTarget = forwardRef<HTMLElement, CoachmarkTargetProps>(
+  function CoachmarkTarget(
+    { name, handle, id: idProp, ...props },
+    forwardedRef,
+  ) {
+    const store = useTourStore(handle);
+    const generatedId = useId();
+    const triggerId = idProp ?? generatedId;
+    const elementRef = useRef<HTMLElement | null>(null);
+    const registration = useMemo(
+      () => ({ triggerId, ref: elementRef }),
+      [triggerId],
+    );
+    const mergedRef = useCallback(
+      (element: HTMLElement | null) => {
+        elementRef.current = element;
+        setRef(forwardedRef, element);
+        if (element) store.registerTarget(name, registration);
+        else store.unregisterTarget(name, triggerId);
+      },
+      [forwardedRef, name, registration, store, triggerId],
+    );
+
+    return (
+      <Popover.Trigger
+        {...props}
+        data-slot="coachmark-target"
+        handle={store.popoverHandle}
+        id={triggerId}
         ref={mergedRef}
       />
     );
@@ -893,10 +956,10 @@ export const CoachmarkBackdrop = forwardRef<
             "--coachmark-cutout-open": geometry?.clipPath,
             clipPath: concealed
               ? "none"
-              : resolvedStyle?.clipPath ??
+              : (resolvedStyle?.clipPath ??
                 (geometry
                   ? "var(--coachmark-cutout-path, var(--coachmark-cutout-open))"
-                  : undefined),
+                  : undefined)),
             visibility: geometry ? undefined : "hidden",
           };
 
@@ -907,8 +970,14 @@ export const CoachmarkBackdrop = forwardRef<
   );
 });
 
-export function CoachmarkStep({ children }: CoachmarkStepProps): ReactElement {
-  return <Popover.Portal>{children}</Popover.Portal>;
+export function CoachmarkStep(props: CoachmarkStepProps): null {
+  const store = useTourStore();
+  const id = useId();
+  useLayoutEffect(() => {
+    store.registerStep(id, props);
+  });
+  useLayoutEffect(() => () => store.unregisterStep(id), [id, store]);
+  return null;
 }
 
 export const CoachmarkPositioner = forwardRef<
@@ -974,9 +1043,18 @@ export const CoachmarkPositioner = forwardRef<
 });
 
 export const CoachmarkPopup = forwardRef<HTMLDivElement, CoachmarkPopupProps>(
-  function CoachmarkPopup({ children, ...popupProps }, forwardedRef) {
-    const { concealed, motionElementRefs, motionState, phase, transitioning } =
-      useCoachmarkContext();
+  function CoachmarkPopup(
+    { children, finalFocus, ...popupProps },
+    forwardedRef,
+  ) {
+    const {
+      concealed,
+      launcherRef,
+      motionElementRefs,
+      motionState,
+      phase,
+      transitioning,
+    } = useCoachmarkContext();
     const mergedPopupRef = useCallback(
       (element: HTMLDivElement | null) => {
         motionElementRefs.popup.current = element;
@@ -992,6 +1070,7 @@ export const CoachmarkPopup = forwardRef<HTMLDivElement, CoachmarkPopupProps>(
         data-motion-state={motionState}
         data-phase={phase}
         data-slot="coachmark-popup"
+        finalFocus={finalFocus ?? launcherRef}
         data-transitioning={transitioning ? "" : undefined}
         ref={mergedPopupRef}
       >
@@ -1095,9 +1174,7 @@ export const CoachmarkViewport = forwardRef<
       return;
     }
 
-    previousContainer.replaceChildren(
-      ...Array.from(snapshot.node.childNodes),
-    );
+    previousContainer.replaceChildren(...Array.from(snapshot.node.childNodes));
   }, [snapshot]);
 
   useLayoutEffect(() => {
@@ -1290,38 +1367,32 @@ export const CoachmarkPrevious = forwardRef<
   });
 });
 
-export const CoachmarkNext = forwardRef<
-  HTMLButtonElement,
-  CoachmarkNextProps
->(function CoachmarkNext(
-  { children, render, ...elementProps },
-  forwardedRef,
-) {
-  const context = useCoachmarkContext();
-  const content =
-    typeof children === "function"
-      ? children(context)
-      : children;
+export const CoachmarkNext = forwardRef<HTMLButtonElement, CoachmarkNextProps>(
+  function CoachmarkNext({ children, render, ...elementProps }, forwardedRef) {
+    const context = useCoachmarkContext();
+    const content =
+      typeof children === "function" ? children(context) : children;
 
-  return useRender({
-    defaultTagName: "button",
-    props: mergeProps(
-      {
-        children: content,
-        "data-slot": context.isLastStep
-          ? "coachmark-finish"
-          : "coachmark-next",
-        onClick: context.next,
-        type: "button",
-      },
-      elementProps,
-    ),
-    ref: forwardedRef,
-    render,
-    state: getPartState(context),
-    stateAttributesMapping: coachmarkPartStateAttributesMapping,
-  });
-});
+    return useRender({
+      defaultTagName: "button",
+      props: mergeProps(
+        {
+          children: content,
+          "data-slot": context.isLastStep
+            ? "coachmark-finish"
+            : "coachmark-next",
+          onClick: context.next,
+          type: "button",
+        },
+        elementProps,
+      ),
+      ref: forwardedRef,
+      render,
+      state: getPartState(context),
+      stateAttributesMapping: coachmarkPartStateAttributesMapping,
+    });
+  },
+);
 
 export const CoachmarkTitle = forwardRef<
   HTMLHeadingElement,
@@ -1336,18 +1407,17 @@ export const CoachmarkTitle = forwardRef<
   );
 });
 
-export const CoachmarkArrow = forwardRef<
-  HTMLDivElement,
-  CoachmarkArrowProps
->(function CoachmarkArrow(props, forwardedRef) {
-  return (
-    <Popover.Arrow
-      {...props}
-      data-slot="coachmark-arrow"
-      ref={forwardedRef}
-    />
-  );
-});
+export const CoachmarkArrow = forwardRef<HTMLDivElement, CoachmarkArrowProps>(
+  function CoachmarkArrow(props, forwardedRef) {
+    return (
+      <Popover.Arrow
+        {...props}
+        data-slot="coachmark-arrow"
+        ref={forwardedRef}
+      />
+    );
+  },
+);
 
 export const CoachmarkDescription = forwardRef<
   HTMLParagraphElement,
@@ -1379,49 +1449,9 @@ export function useCoachmark(): CoachmarkRenderState {
   return useCoachmarkContext();
 }
 
-function collectSteps(children: ReactNode): ReactElement<CoachmarkStepProps>[] {
-  const steps: ReactElement<CoachmarkStepProps>[] = [];
-
-  Children.forEach(children, (child) => {
-    if (!isValidElement(child)) {
-      return;
-    }
-
-    if (child.type === Fragment) {
-      collectSteps((child.props as { children?: ReactNode }).children).forEach(
-        (step) => steps.push(step),
-      );
-    } else if (child.type === CoachmarkStep) {
-      steps.push(child as ReactElement<CoachmarkStepProps>);
-    }
-  });
-
-  return steps;
-}
-
-function removeStepMarkers(children: ReactNode): ReactNode {
-  return Children.map(children, (child) => {
-    if (!isValidElement(child)) {
-      return child;
-    }
-
-    if (child.type === Fragment) {
-      const fragmentProps = child.props as { children?: ReactNode };
-      return cloneElement(child as ReactElement<{ children?: ReactNode }>, {
-        children: removeStepMarkers(fragmentProps.children),
-      });
-    }
-
-    if (child.type === CoachmarkStep) {
-      return null;
-    }
-
-    return child;
-  });
-}
-
 export function CoachmarkRoot({
   children,
+  handle,
   open,
   defaultOpen = false,
   onOpenChange,
@@ -1432,6 +1462,17 @@ export function CoachmarkRoot({
   resetOnOpen = true,
   scrollIntoView = true,
 }: CoachmarkProps): ReactElement {
+  const [ownHandle] = useState(createCoachmarkHandle);
+  const store = getTourStore(handle ?? ownHandle);
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot,
+  );
+  const rootOwner = useRef({}).current;
+  useLayoutEffect(() => store.attachRoot(rootOwner), [rootOwner, store]);
+  const missingTargetRef = useRef<HTMLElement | null>(null);
+  const launcherRef = useRef<HTMLElement | null>(null);
   const popoverActionsRef = useRef<Popover.Root.Actions | null>(null);
   const closeActionRef = useRef<"close" | "finish" | undefined>(undefined);
   const backdropMotionRef = useRef<HTMLElement | null>(null);
@@ -1445,7 +1486,23 @@ export function CoachmarkRoot({
     }),
     [],
   );
-  const steps = useMemo(() => collectSteps(children), [children]);
+  const steps = useMemo(
+    () =>
+      [...snapshot.steps]
+        .sort((a, b) => (a.props.order ?? 0) - (b.props.order ?? 0))
+        .map((step) => ({
+          ...step,
+          props: {
+            ...step.props,
+            target:
+              typeof step.props.target === "string"
+                ? (snapshot.targets.get(step.props.target)?.ref ??
+                  missingTargetRef)
+                : step.props.target,
+          },
+        })),
+    [snapshot],
+  );
   const stepCount = steps.length;
   const [resolvedOpen, setResolvedOpen] = useControllableState({
     value: open,
@@ -1465,6 +1522,13 @@ export function CoachmarkRoot({
   );
   const activeStepElement = steps[safeStepIndex];
   const activeStep = activeStepElement?.props ?? null;
+  const activeNamedTarget =
+    typeof snapshot.steps.find((step) => step.id === activeStepElement?.id)
+      ?.props.target === "string";
+  const activeTarget = [...snapshot.targets.values()].find(
+    (target) => target.ref === activeStep?.target,
+  );
+  const targetReady = !activeNamedTarget || !!activeStep?.target.current;
   const openAbortRef = useRef<AbortController | null>(null);
   const openStepIndexRef = useRef<number | null>(null);
   const transitionAbortRef = useRef<AbortController | null>(null);
@@ -1500,7 +1564,7 @@ export function CoachmarkRoot({
   }, [abortStepTransition, presentedOpen]);
 
   useLayoutEffect(() => {
-    if (!resolvedOpen || stepCount === 0) {
+    if (!resolvedOpen || stepCount === 0 || !targetReady) {
       abortOpenPreparation();
       abortStepTransition();
       setActivationDirection(undefined);
@@ -1560,6 +1624,7 @@ export function CoachmarkRoot({
     safeStepIndex,
     scrollIntoView,
     stepCount,
+    targetReady,
   ]);
 
   const updateStep = useCallback(
@@ -1811,6 +1876,7 @@ export function CoachmarkRoot({
     () => ({
       activeStep,
       activationDirection,
+      launcherRef,
       close,
       concealed,
       finish,
@@ -1845,62 +1911,69 @@ export function CoachmarkRoot({
       transitionTo,
     ],
   );
-  const renderedChildren = useMemo(
-    () => (
-      <>
-        {removeStepMarkers(children)}
-        {activeStepElement
-          ? cloneElement(activeStepElement, {
-              key: "__coachmark-active-step",
-            })
-          : null}
-      </>
-    ),
-    [activeStepElement, children],
-  );
 
   return (
-    <InternalCoachmarkContext.Provider value={context}>
-      <Popover.Root
-        actionsRef={popoverActionsRef}
-        modal={modal}
-        onOpenChange={(nextOpen, details) => {
-          if (!nextOpen && !resolvedOpenRef.current) {
-            details.cancel();
-            return;
+    <TourStoreContext.Provider value={store}>
+      <InternalCoachmarkContext.Provider value={context}>
+        <Popover.Root
+          actionsRef={popoverActionsRef}
+          handle={store.popoverHandle}
+          triggerId={
+            activeTarget?.triggerId ??
+            (launcherRef.current?.isConnected ? launcherRef.current.id : undefined) ??
+            snapshot.launchers.values().next().value?.id ??
+            null
           }
-          if (nextOpen && stepCount === 0) {
-            details.cancel();
-            return;
-          }
-          const eventDetails: CoachmarkOpenChangeEventDetails = details;
-          if (!nextOpen && closeActionRef.current) {
-            eventDetails.action = closeActionRef.current;
-          }
+          modal={modal}
+          onOpenChange={(nextOpen, details) => {
+            if (
+              details.reason.startsWith("trigger-") &&
+              store.isTarget(details.trigger)
+            ) {
+              details.cancel();
+              return;
+            }
+            if (!nextOpen && !resolvedOpenRef.current) {
+              details.cancel();
+              return;
+            }
+            if (nextOpen && stepCount === 0) {
+              details.cancel();
+              return;
+            }
+            const eventDetails: CoachmarkOpenChangeEventDetails = details;
+            if (!nextOpen && closeActionRef.current) {
+              eventDetails.action = closeActionRef.current;
+            }
 
-          onOpenChange?.(nextOpen, eventDetails);
-          if (details.isCanceled) {
-            return;
-          }
+            onOpenChange?.(nextOpen, eventDetails);
+            if (details.isCanceled) {
+              return;
+            }
 
-          if (nextOpen && resetOnOpen) {
-            updateStep(0);
-          } else if (!nextOpen && eventDetails.action === "finish") {
-            updateStep(stepCount - 1);
-          }
-          // A controlled parent owns whether this request changes the open state.
-          // Uncontrolled requests update the ref immediately to coalesce repeated
-          // hook calls before React commits the closed state.
-          if (open === undefined) {
-            resolvedOpenRef.current = nextOpen;
-          }
-          setResolvedOpen(nextOpen);
-        }}
-        open={presentedOpen && stepCount > 0}
-      >
-        {renderedChildren}
-      </Popover.Root>
-    </InternalCoachmarkContext.Provider>
+            if (nextOpen && details.trigger instanceof HTMLElement) {
+              launcherRef.current = details.trigger;
+            }
+            if (nextOpen && resetOnOpen) {
+              updateStep(0);
+            } else if (!nextOpen && eventDetails.action === "finish") {
+              updateStep(stepCount - 1);
+            }
+            // A controlled parent owns whether this request changes the open state.
+            // Uncontrolled requests update the ref immediately to coalesce repeated
+            // hook calls before React commits the closed state.
+            if (open === undefined) {
+              resolvedOpenRef.current = nextOpen;
+            }
+            setResolvedOpen(nextOpen);
+          }}
+          open={presentedOpen && stepCount > 0}
+        >
+          {children}
+          <Popover.Portal>{activeStep?.children}</Popover.Portal>
+        </Popover.Root>
+      </InternalCoachmarkContext.Provider>
+    </TourStoreContext.Provider>
   );
 }
 
@@ -1909,6 +1982,7 @@ export function CoachmarkRoot({
  * backwards compatibility, while its parts are also available as properties.
  */
 export const Coachmark = Object.assign(CoachmarkRoot, {
+  createHandle: createCoachmarkHandle,
   Arrow: CoachmarkArrow,
   Backdrop: CoachmarkBackdrop,
   Close: CoachmarkClose,
@@ -1921,6 +1995,7 @@ export const Coachmark = Object.assign(CoachmarkRoot, {
   Step: CoachmarkStep,
   Stepper: CoachmarkStepper,
   Title: CoachmarkTitle,
+  Target: CoachmarkTarget,
   Trigger: CoachmarkTrigger,
   Viewport: CoachmarkViewport,
 });

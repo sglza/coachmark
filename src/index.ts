@@ -12,6 +12,7 @@ export {
   CoachmarkStep,
   CoachmarkStepper,
   CoachmarkTitle,
+  CoachmarkTarget,
   CoachmarkTrigger,
   CoachmarkViewport,
   useCoachmark,
@@ -29,7 +30,11 @@ export type {
   CoachmarkPreviousProps,
   CoachmarkRenderState,
   CoachmarkStepProps,
+  CoachmarkTargetProps,
+  CoachmarkTriggerProps,
   CoachmarkStepperProps,
   CoachmarkViewportProps,
   CoachmarkViewportState,
 } from "./coachmark";
+
+export { CoachmarkHandle, createCoachmarkHandle } from "./tour-store";

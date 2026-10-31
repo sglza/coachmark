@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CoachmarkExample } from "./components/coachmark-example";
+import { CompositionDemo } from "./components/composition/composition-demo";
 import { CodePreview } from "./components/code-preview";
 import { ConfigControls } from "./components/config-controls";
 import { DEFAULT_CONFIG } from "./playground-config";
@@ -8,8 +9,7 @@ import type { PlaygroundConfig, StylingMode } from "./playground-types";
 export function PlaygroundApp() {
   const [config, setConfig] = useState<PlaygroundConfig>(DEFAULT_CONFIG);
   const [sessionKey, setSessionKey] = useState(0);
-  const [stylingMode, setStylingMode] =
-    useState<StylingMode>("css-modules");
+  const [stylingMode, setStylingMode] = useState<StylingMode>("css-modules");
 
   const changeStylingMode = (mode: StylingMode) => {
     setStylingMode(mode);
@@ -40,6 +40,8 @@ export function PlaygroundApp() {
           stylingMode={stylingMode}
         />
       </div>
+
+      <CompositionDemo />
 
       <CodePreview
         config={config}
