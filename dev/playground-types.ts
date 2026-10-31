@@ -1,7 +1,6 @@
-import type {
-  CoachmarkPositionerProps,
-  CoachmarkProps,
-} from "coachmark";
+import type { CoachmarkPositionerProps, CoachmarkProps } from "coachmark";
+
+import type { PlaygroundStepId } from "./playground-steps";
 
 export type StylingMode = "css-modules" | "tailwind";
 
@@ -10,8 +9,10 @@ export type PlaygroundConfig = {
   alignOffset: number;
   arrow: boolean;
   backdrop: boolean;
+  keepOpenOnOutsideInteraction: boolean;
   modal: NonNullable<CoachmarkProps["modal"]>;
   resetOnOpen: boolean;
+  stepInteraction: Record<PlaygroundStepId, boolean>;
   side: NonNullable<CoachmarkPositionerProps["side"]>;
   sideOffset: number;
   spotlightPadding: number;

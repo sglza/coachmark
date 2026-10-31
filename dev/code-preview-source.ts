@@ -1,3 +1,4 @@
+import { PLAYGROUND_STEPS } from "./playground-steps";
 import { getCoachmarkClassNames } from "./coachmark-styles";
 import type { PlaygroundConfig, StylingMode } from "./playground-types";
 import cssModuleSource from "./coachmark.module.css?raw";
@@ -27,86 +28,168 @@ export function createTsxSource(
     (config.transition === "move" || config.transition === "viewport-only");
   const writer = new SourceWriter();
 
-  writer.line('import { useRef } from "react";');
+  writer.line('import { useState } from "react";');
+  writer.line('import { Tabs } from "@base-ui/react/tabs";');
   writer.line('import { Coachmark } from "coachmark";');
   if (stylingMode === "css-modules") {
     writer.line('import styles from "./tour.module.css";');
   }
   writer.blank();
-  writer.line("export function ActivationTour() {");
-  writer.line("const targetRef = useRef<HTMLDivElement>(null);", 1);
+  writer.line("export function WorkspaceTour() {");
+  writer.line("const [weekly, setWeekly] = useState(false);", 1);
+  writer.line("const [invitations, setInvitations] = useState(6);", 1);
   writer.blank();
   writer.line("return (", 1);
   writer.line("<Coachmark.Root", 2);
   writer.line(formatValueProp("modal", config.modal), 3);
   writer.line(formatValueProp("resetOnOpen", config.resetOnOpen), 3);
+  if (config.keepOpenOnOutsideInteraction) {
+    writer.line("onOpenChange={(nextOpen, details) => {", 3);
+    writer.line("if (", 4);
+    writer.line("!nextOpen &&", 5);
+    writer.line('(details.reason === "outside-press" ||', 5);
+    writer.line('details.reason === "focus-out")', 6);
+    writer.line(") {", 4);
+    writer.line("details.cancel();", 5);
+    writer.line("}", 4);
+    writer.line("}}", 3);
+  }
   writer.line(">", 2);
   writer.line("<Coachmark.Trigger>Start tour</Coachmark.Trigger>", 3);
+  writeWorkspaceTargets(writer);
 
   if (config.backdrop) {
     writer.line("<Coachmark.Backdrop", 3);
-    writeClassNameProp(
-      writer,
-      4,
-      "className",
-      classes.backdrop,
-      stylingMode,
-    );
+    writeClassNameProp(writer, 4, "className", classes.backdrop, stylingMode);
     writer.line("/>", 3);
   }
 
-  writer.line("<Coachmark.Step", 3);
-  writer.line(`spotlightPadding={${config.spotlightPadding}}`, 4);
-  writer.line(`spotlightRadius={${config.spotlightRadius}}`, 4);
-  writer.line("target={targetRef}", 4);
-  writer.line(">", 3);
-  writer.line("<Coachmark.Positioner", 4);
-  writer.line(`align="${config.align}"`, 5);
-  writer.line(`alignOffset={${config.alignOffset}}`, 5);
-  writer.line(`side="${config.side}"`, 5);
-  writer.line(`sideOffset={${config.sideOffset}}`, 5);
-  writeClassNameProp(
-    writer,
-    5,
-    "className",
-    classes.positioner,
-    stylingMode,
-  );
-  writer.line(">", 4);
-  writer.line("<Coachmark.Popup", 5);
-  writeClassNameProp(
-    writer,
-    6,
-    "className",
-    classes.popup,
-    stylingMode,
-  );
-  writer.line(">", 5);
-
-  if (viewportEnabled) {
-    writer.line("<Coachmark.Viewport", 6);
+  for (const [index, step] of PLAYGROUND_STEPS.entries()) {
+    const stepClasses =
+      stylingMode === "css-modules"
+        ? getCssModulePreviewClassNames(config, step.size)
+        : getCoachmarkClassNames(stylingMode, config, step.size);
+    writer.line("<Coachmark.Step", 3);
+    writer.line(`spotlightPadding={${config.spotlightPadding}}`, 4);
+    writer.line(`spotlightRadius={${config.spotlightRadius}}`, 4);
+    writer.line(`target="${step.target}"`, 4);
+    writer.line(`order={${index}}`, 4);
+    writer.line(
+      formatValueProp(
+        "allowTargetInteraction",
+        config.stepInteraction[step.id],
+      ),
+      4,
+    );
+    writer.line(">", 3);
+    writer.line("<Coachmark.Positioner", 4);
+    writer.line(`align="${config.align}"`, 5);
+    writer.line(`alignOffset={${config.alignOffset}}`, 5);
+    writer.line(`side="${config.side}"`, 5);
+    writer.line(`sideOffset={${config.sideOffset}}`, 5);
     writeClassNameProp(
       writer,
-      7,
+      5,
       "className",
-      classes.viewport,
+      stepClasses.positioner,
       stylingMode,
     );
-    writer.line(">", 6);
-    writeStepContent(writer, 7, config, stylingMode, classes);
-    writer.line("</Coachmark.Viewport>", 6);
-  } else {
-    writeStepContent(writer, 6, config, stylingMode, classes);
-  }
+    writer.line(">", 4);
+    writer.line("<Coachmark.Popup", 5);
+    writeClassNameProp(writer, 6, "className", stepClasses.popup, stylingMode);
+    writer.line(">", 5);
 
-  writer.line("</Coachmark.Popup>", 5);
-  writer.line("</Coachmark.Positioner>", 4);
-  writer.line("</Coachmark.Step>", 3);
+    if (viewportEnabled) {
+      writer.line("<Coachmark.Viewport", 6);
+      writeClassNameProp(
+        writer,
+        7,
+        "className",
+        stepClasses.viewport,
+        stylingMode,
+      );
+      writer.line(">", 6);
+      writeStepContent(writer, 7, config, stylingMode, stepClasses, step);
+      writer.line("</Coachmark.Viewport>", 6);
+    } else {
+      writeStepContent(writer, 6, config, stylingMode, stepClasses, step);
+    }
+
+    writer.line("</Coachmark.Popup>", 5);
+    writer.line("</Coachmark.Positioner>", 4);
+    writer.line("</Coachmark.Step>", 3);
+  }
   writer.line("</Coachmark.Root>", 2);
   writer.line(");", 1);
   writer.line("}");
 
   return writer.toString();
+}
+
+function writeWorkspaceTargets(writer: SourceWriter) {
+  const [views, activation, invite] = PLAYGROUND_STEPS;
+  writer.line(`<Coachmark.Target name="${invite.target}" render={`, 3);
+  writer.line(
+    "<button onClick={() => setInvitations(current => current + 1)} />",
+    4,
+  );
+  writer.line("}>", 3);
+  writer.line("Invite teammate", 4);
+  writer.line("</Coachmark.Target>", 3);
+  writer.line(
+    '<p aria-live="polite">Pending invitations: {invitations}</p>',
+    3,
+  );
+  writer.line(
+    `<Coachmark.Target name="${views.target}" render={<Tabs.Root defaultValue="overview" />}>`,
+    3,
+  );
+  writer.line('<Tabs.List aria-label="Workspace views" activateOnFocus>', 4);
+  for (const [value, label] of [
+    ["overview", "Overview"],
+    ["activity", "Activity"],
+    ["settings", "Settings"],
+  ]) {
+    writer.line(`<Tabs.Tab value="${value}">${label}</Tabs.Tab>`, 5);
+  }
+  writer.line("</Tabs.List>", 4);
+  writer.line(
+    `<Coachmark.Target name="${activation.target}" render={<article />}>`,
+    4,
+  );
+  writer.line(
+    '<strong aria-live="polite">{weekly ? "74%" : "68%"}</strong>',
+    5,
+  );
+  writer.line(
+    '<button aria-label="Toggle activation period" aria-pressed={weekly} onClick={() => setWeekly(current => !current)}>',
+    5,
+  );
+  writer.line('{weekly ? "This week" : "This month"}', 6);
+  writer.line("</button>", 5);
+  writer.line("</Coachmark.Target>", 4);
+  writer.line(
+    '<Tabs.Panel value="overview">Your workspace members</Tabs.Panel>',
+    4,
+  );
+  writer.line('<Tabs.Panel value="activity">', 4);
+  writer.line(
+    '<ul aria-label="Workspace activity" tabIndex={0} style={{ maxHeight: 144, overflow: "auto" }}>',
+    5,
+  );
+  writer.line("{Array.from({ length: 8 }, (_, index) => (", 6);
+  writer.line(
+    "<li key={index}>Workspace setup task {index + 1} completed.</li>",
+    7,
+  );
+  writer.line("))}", 6);
+  writer.line("</ul>", 5);
+  writer.line("</Tabs.Panel>", 4);
+  writer.line(
+    '<Tabs.Panel value="settings">Workspace access: invite only</Tabs.Panel>',
+    4,
+  );
+  writer.line("</Coachmark.Target>", 3);
 }
 
 function writeStepContent(
@@ -115,6 +198,7 @@ function writeStepContent(
   config: PlaygroundConfig,
   stylingMode: StylingMode,
   classes: ReturnType<typeof getCoachmarkClassNames>,
+  step: (typeof PLAYGROUND_STEPS)[number],
 ) {
   writer.line("<div", level);
   writeClassNameProp(
@@ -161,7 +245,7 @@ function writeStepContent(
     stylingMode,
   );
   writer.line(">", level + 1);
-  writer.line("Track activation", level + 2);
+  writer.line(step.title, level + 2);
   writer.line("</Coachmark.Title>", level + 1);
 
   writer.line("<Coachmark.Description", level + 1);
@@ -173,7 +257,7 @@ function writeStepContent(
     stylingMode,
   );
   writer.line(">", level + 1);
-  writer.line("See where onboarding slows down.", level + 2);
+  writer.line(step.description, level + 2);
   writer.line("</Coachmark.Description>", level + 1);
 
   writer.line("<div", level + 1);
@@ -196,7 +280,12 @@ function writeStepContent(
   );
   writer.line(">", level + 2);
   writer.line("<Coachmark.Previous>Back</Coachmark.Previous>", level + 3);
-  writer.line("<Coachmark.Next>Next</Coachmark.Next>", level + 3);
+  writer.line("<Coachmark.Next>", level + 3);
+  writer.line(
+    '{({ isLastStep }) => isLastStep ? "Finish" : "Next"}',
+    level + 4,
+  );
+  writer.line("</Coachmark.Next>", level + 3);
   writer.line("</div>", level + 2);
   writer.line("</div>", level + 1);
   writer.line("</div>", level);
@@ -234,6 +323,7 @@ function writeClassNameProp(
 
 function getCssModulePreviewClassNames(
   config: Pick<PlaygroundConfig, "transition" | "viewport">,
+  size: "compact" | "medium" | "large" = "medium",
 ): ReturnType<typeof getCoachmarkClassNames> {
   const transition = {
     fade: "transitionFade",
@@ -258,7 +348,9 @@ function getCssModulePreviewClassNames(
     content: "Content",
     description: "Description",
     navigation: "Navigation",
-    popup: withViewport("Popup sizeMedium"),
+    popup: withViewport(
+      `Popup ${{ compact: "sizeCompact", medium: "sizeMedium", large: "sizeLarge" }[size]}`,
+    ),
     positioner: withViewport("Positioner"),
     stepper: "Stepper",
     title: "Title",

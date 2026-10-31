@@ -1,19 +1,16 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { CodePreview } from "../dev/components/code-preview";
-import {
-  CSS_SOURCE,
-  createTsxSource,
-} from "../dev/code-preview-source";
+import { CSS_SOURCE, createTsxSource } from "../dev/code-preview-source";
 import { DEFAULT_CONFIG } from "../dev/playground-config";
 import type { StylingMode } from "../dev/playground-types";
 
 function CodePreviewFixture() {
-  const [stylingMode, setStylingMode] =
-    useState<StylingMode>("css-modules");
+  const [stylingMode, setStylingMode] = useState<StylingMode>("css-modules");
 
   return (
     <CodePreview
@@ -30,14 +27,10 @@ describe("CodePreview", () => {
     const { container } = render(<CodePreviewFixture />);
 
     expect(screen.getByRole("tab", { name: "tour.tsx" })).toBeVisible();
-    expect(
-      screen.getByRole("tab", { name: "tour.module.css" }),
-    ).toBeVisible();
+    expect(screen.getByRole("tab", { name: "tour.module.css" })).toBeVisible();
     expect(screen.getByRole("tabpanel")).toHaveTextContent('side="bottom"');
 
-    await user.click(
-      screen.getByRole("tab", { name: "tour.module.css" }),
-    );
+    await user.click(screen.getByRole("tab", { name: "tour.module.css" }));
     expect(screen.getByRole("tabpanel")).toHaveTextContent(".Popup");
 
     await user.click(screen.getByRole("combobox", { name: "Styling" }));
@@ -68,7 +61,9 @@ describe("CodePreview", () => {
     expect(source).toContain(`      <Coachmark.Step
         spotlightPadding={8}
         spotlightRadius={12}
-        target={targetRef}
+        target="workspace-views"
+        order={0}
+        allowTargetInteraction
       >
         <Coachmark.Positioner
           align="center"
@@ -100,6 +95,50 @@ describe("CodePreview", () => {
             styles.withViewport,
           ].join(" ")}`);
   });
+
+  it.each(["css-modules", "tailwind"] as const)(
+    "generates all named targets and independent policies in %s",
+    (mode) => {
+      const source = createTsxSource(
+        {
+          ...DEFAULT_CONFIG,
+          stepInteraction: { views: false, activation: true, invite: false },
+        },
+        mode,
+      );
+      const compiled = ts.transpileModule(source, {
+        fileName: "workspace-tour.tsx",
+        reportDiagnostics: true,
+        compilerOptions: {
+          jsx: ts.JsxEmit.ReactJSX,
+          target: ts.ScriptTarget.ES2020,
+        },
+      });
+      expect(
+        compiled.diagnostics?.filter(
+          (item) => item.category === ts.DiagnosticCategory.Error,
+        ),
+      ).toEqual([]);
+      expect(source).not.toContain("useRef");
+      const steps = [...source.matchAll(/<Coachmark.Step\s[\s\S]*?>/g)].map(
+        (match) => match[0],
+      );
+      expect(steps).toHaveLength(3);
+      for (const [index, target] of [
+        "workspace-views",
+        "workspace-activation",
+        "workspace-invite",
+      ].entries()) {
+        expect(source).toContain(`<Coachmark.Target name="${target}"`);
+        expect(steps[index]).toContain(`target="${target}"`);
+        expect(steps[index]).toContain(`order={${index}}`);
+      }
+      expect(steps[0]).toContain("allowTargetInteraction={false}");
+      expect(steps[1]).toMatch(/allowTargetInteraction\n/);
+      expect(steps[2]).toContain("allowTargetInteraction={false}");
+      expect(source).toContain('"Finish" : "Next"');
+    },
+  );
 
   it("previews the complete stylesheet used by the CSS Module strategy", () => {
     expect(CSS_SOURCE).toContain(".Popup.sizeCompact");
@@ -137,9 +176,7 @@ describe("CodePreview", () => {
       /^ {12}className=\{\[\n {14}"relative flex box-border/m,
     );
     expect(source).toMatch(/^ {12}\]\.join\(" "\)\}/m);
-    expect(source).toContain(
-      "data-[ending-style]:[transform:scale(0.97)]",
-    );
+    expect(source).toContain("data-[ending-style]:[transform:scale(0.97)]");
     expect(source).toContain("data-[ending-style]:opacity-0");
     expect(source).toContain(
       "data-[ending-style]:[transition-timing-function:ease-out]",
@@ -160,11 +197,7 @@ describe("CodePreview", () => {
       "[transition:opacity_180ms_ease-out,transform_180ms_ease-out]",
     ],
     ["none", "transitionNone", "[transition:none]"],
-    [
-      "viewport-only",
-      "transitionViewportOnly",
-      "[transition:none]",
-    ],
+    ["viewport-only", "transitionViewportOnly", "[transition:none]"],
   ] as const)(
     "keeps the %s transition equivalent in both generated strategies",
     (transition, moduleClass, tailwindClass) => {

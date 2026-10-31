@@ -8,8 +8,7 @@ import type { PlaygroundConfig, StylingMode } from "./playground-types";
 export function PlaygroundApp() {
   const [config, setConfig] = useState<PlaygroundConfig>(DEFAULT_CONFIG);
   const [sessionKey, setSessionKey] = useState(0);
-  const [stylingMode, setStylingMode] =
-    useState<StylingMode>("css-modules");
+  const [stylingMode, setStylingMode] = useState<StylingMode>("css-modules");
 
   const changeStylingMode = (mode: StylingMode) => {
     setStylingMode(mode);
@@ -36,6 +35,12 @@ export function PlaygroundApp() {
       <div className="flex min-h-[560px] items-center py-16">
         <CoachmarkExample
           config={config}
+          onStepInteractionChange={(step, allowed) =>
+            setConfig((current) => ({
+              ...current,
+              stepInteraction: { ...current.stepInteraction, [step]: allowed },
+            }))
+          }
           sessionKey={sessionKey}
           stylingMode={stylingMode}
         />
